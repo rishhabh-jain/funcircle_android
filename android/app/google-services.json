@@ -1,0 +1,114 @@
+{
+  "project_info": {
+    "project_number": "446213644019",
+    "project_id": "faceout-b996d",
+    "storage_bucket": "faceout-b996d.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:446213644019:android:522a08172e862ca65c6186",
+        "android_client_info": {
+          "package_name": "com.flutterflow.faceout"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "446213644019-iqea9qt0pqr3n7pb9rd1r4jb6pp97j45.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.flutterflow.faceout",
+            "certificate_hash": "9bbb3186b2189ef16d8f272bdab59362c395cbb4"
+          }
+        },
+        {
+          "client_id": "446213644019-ohlg2mqt62h2pota55hdfbbkao84is3r.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.flutterflow.faceout",
+            "certificate_hash": "112550eb947fc9805596071ffc84f983d6f44f24"
+          }
+        },
+        {
+          "client_id": "446213644019-ktosdi9ckgvgvujjmumbabqemj858als.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDyTp_Pf3X3hwM2OxXZSV3N50f2BXbYN1g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "446213644019-ktosdi9ckgvgvujjmumbabqemj858als.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "446213644019-8f52ge65ts36o3ktttard3puccvjoqhl.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "kaleo.chat.app"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:446213644019:android:d1448cd534c6edce5c6186",
+        "android_client_info": {
+          "package_name": "faceout.social"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "446213644019-5ean073bs64ker6g06cm4525rt1nbng7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "faceout.social",
+            "certificate_hash": "112550eb947fc9805596071ffc84f983d6f44f24"
+          }
+        },
+        {
+          "client_id": "446213644019-pt8jn19mk1dkm6oo0uu91uit2c34aj47.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "faceout.social",
+            "certificate_hash": "9bbb3186b2189ef16d8f272bdab59362c395cbb4"
+          }
+        },
+        {
+          "client_id": "446213644019-ktosdi9ckgvgvujjmumbabqemj858als.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDyTp_Pf3X3hwM2OxXZSV3N50f2BXbYN1g"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "446213644019-ktosdi9ckgvgvujjmumbabqemj858als.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "446213644019-8f52ge65ts36o3ktttard3puccvjoqhl.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "kaleo.chat.app"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

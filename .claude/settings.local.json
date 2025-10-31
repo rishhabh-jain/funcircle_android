@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(flutter analyze:*)",
+      "Bash(flutter pub get:*)",
+      "Read(///**)",
+      "Bash(flutter format:*)",
+      "Bash(dart format:*)",
+      "Bash(awk:*)",
+      "Bash(cat:*)",
+      "Bash(find:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(flutter run:*)",
+      "Bash(flutter devices:*)",
+      "Bash(pkill:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

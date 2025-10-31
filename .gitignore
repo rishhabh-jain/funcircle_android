@@ -1,0 +1,51 @@
+# Flutter/Dart stuff
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+generated_plugin_registrant.dart
+
+# IDE settings
+.idea/
+.vscode/
+*.iml
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Firebase and Supabase local configs
+firebase/
+supabase/.branches/
+supabase/.temp/
+supabase/.env
+supabase/.env.local
+supabase/.local
+supabase_migrations/.temp/
+
+# Android
+android/.gradle/
+android/app/build/
+android/key.properties
+android/local.properties
+
+# iOS / macOS
+ios/Flutter/.symlinks/
+ios/Pods/
+ios/Runner.xcworkspace/
+macos/Flutter/ephemeral/
+macos/Pods/
+macos/Runner.xcworkspace/
+
+# Web
+web/.dart_tool/
+web/build/
+
+# Logs
+*.log
+
+# Other build outputs
+coverage/
