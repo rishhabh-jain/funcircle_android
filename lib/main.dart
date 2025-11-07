@@ -2,6 +2,7 @@ import '/custom_code/actions/index.dart' as actions;
 import 'package:provider/provider.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'dart:ui';
 
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
@@ -21,6 +22,7 @@ import 'index.dart';
 import 'flutter_flow/revenue_cat_util.dart' as revenue_cat;
 
 import '/backend/firebase_dynamic_links/firebase_dynamic_links.dart';
+import '/playnow/services/payment_reconciliation_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -107,8 +109,16 @@ class _MyAppState extends State<MyApp> {
     _appStateNotifier = AppStateNotifier.instance;
     _router = createRouter(_appStateNotifier);
     userStream = funCircleFirebaseUserStream()
-      ..listen((user) {
+      ..listen((user) async {
         _appStateNotifier.update(user);
+
+        // Check if user is logged in
+        // NOTE: Deleted user checking is now handled in login screens
+        // (welcome_screen, otp_verification_screen) to show proper UI messages
+        if (user.loggedIn) {
+          // Check for pending payments when user logs in
+          PaymentReconciliationService.checkPendingPayments();
+        }
       });
     jwtTokenStream.listen((_) {});
     Future.delayed(
@@ -178,11 +188,11 @@ class NavBarPage extends StatefulWidget {
   final bool disableResizeToAvoidBottomInset;
 
   @override
-  _NavBarPageState createState() => _NavBarPageState();
+  NavBarPageState createState() => NavBarPageState();
 }
 
-/// This is the private State class that goes with NavBarPage.
-class _NavBarPageState extends State<NavBarPage> {
+/// This is the State class that goes with NavBarPage.
+class NavBarPageState extends State<NavBarPage> {
   String _currentPageName = 'HomeNew';
   late Widget? _currentPage;
 
@@ -193,13 +203,21 @@ class _NavBarPageState extends State<NavBarPage> {
     _currentPage = widget.page;
   }
 
+  // Public method to switch tabs from child widgets
+  void switchToTab(String tabName) {
+    safeSetState(() {
+      _currentPage = null;
+      _currentPageName = tabName;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final tabs = {
       'HomeNew': HomeNewWidget(),
       'findPlayersNew': FindPlayersNewWidget(),
       'playnew': PlaynewWidget(),
-      'venuesNew': VenuesNewWidget(),
+      'venuesNew': VenueBookingWidget(),
       'chatsnew': ChatsnewWidget(),
     };
     final currentIndex = tabs.keys.toList().indexOf(_currentPageName);
@@ -207,60 +225,153 @@ class _NavBarPageState extends State<NavBarPage> {
     return Scaffold(
       resizeToAvoidBottomInset: !widget.disableResizeToAvoidBottomInset,
       body: _currentPage ?? tabs[_currentPageName],
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: currentIndex,
-        onTap: (i) => safeSetState(() {
-          _currentPage = null;
-          _currentPageName = tabs.keys.toList()[i];
-        }),
-        backgroundColor: Color(0xFF121212),
-        selectedItemColor: FlutterFlowTheme.of(context).tertiary,
-        unselectedItemColor: Color(0xFF949494),
-        showSelectedLabels: true,
-        showUnselectedLabels: true,
-        type: BottomNavigationBarType.fixed,
-        items: <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-            icon: Icon(
-              FFIcons.khouseSimple,
-              size: 24.0,
-            ),
-            label: 'Home',
-            tooltip: '',
+      bottomNavigationBar: _buildGlassyBottomNav(context, currentIndex, tabs),
+    );
+  }
+
+  Widget _buildGlassyBottomNav(BuildContext context, int currentIndex, Map<String, Widget> tabs) {
+    final navItems = [
+      {'icon': Icons.home_rounded, 'label': 'Home'},
+      {'icon': Icons.explore_rounded, 'label': 'Find'},
+      {'icon': Icons.sports_tennis_rounded, 'label': 'Play'},
+      {'icon': Icons.stadium_rounded, 'label': 'Venues'},
+      {'icon': Icons.forum_rounded, 'label': 'Chats'},
+    ];
+
+    return Container(
+      decoration: BoxDecoration(
+        boxShadow: [
+          // Main shadow
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.6),
+            blurRadius: 15,
+            spreadRadius: 0,
+            offset: const Offset(0, -4),
           ),
-          BottomNavigationBarItem(
-            icon: Icon(
-              Icons.location_on_outlined,
-              size: 24.0,
-            ),
-            label: 'Find Players',
-            tooltip: '',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(
-              FFIcons.kbadmintonPlayerSvgrepoCom,
-              size: 24.0,
-            ),
-            label: 'Play',
-            tooltip: '',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(
-              Icons.calendar_today,
-              size: 24.0,
-            ),
-            label: 'Book Courts',
-            tooltip: '',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(
-              Icons.chat_bubble_outline,
-              size: 24.0,
-            ),
-            label: 'Chats',
-            tooltip: '',
-          )
         ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.zero,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+          child: Container(
+            height: 65,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  const Color(0xFF1C1C1E).withValues(alpha: 0.97),
+                  const Color(0xFF141414).withValues(alpha: 0.98),
+                  Colors.black.withValues(alpha: 0.99),
+                ],
+                stops: const [0.0, 0.5, 1.0],
+              ),
+              border: Border(
+                top: BorderSide(
+                  width: 1,
+                  color: Colors.white.withValues(alpha: 0.1),
+                ),
+              ),
+            ),
+            child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: List.generate(navItems.length, (index) {
+                      final item = navItems[index];
+                      final isSelected = currentIndex == index;
+
+                      return Expanded(
+                        child: GestureDetector(
+                          onTap: () {
+                            safeSetState(() {
+                              _currentPage = null;
+                              _currentPageName = tabs.keys.toList()[index];
+                            });
+                          },
+                          behavior: HitTestBehavior.opaque,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                // Icon with gradient background when selected
+                                AnimatedContainer(
+                                  duration: const Duration(milliseconds: 250),
+                                  curve: Curves.easeOutCubic,
+                                  width: isSelected ? 42 : 34,
+                                  height: isSelected ? 42 : 34,
+                                  decoration: BoxDecoration(
+                                    gradient: isSelected
+                                        ? const LinearGradient(
+                                            begin: Alignment.topLeft,
+                                            end: Alignment.bottomRight,
+                                            colors: [
+                                              Color(0xFFFF6B35),
+                                              Color(0xFFF7931E),
+                                            ],
+                                          )
+                                        : null,
+                                    borderRadius: BorderRadius.circular(13),
+                                    border: isSelected
+                                        ? Border.all(
+                                            color: Colors.white.withValues(alpha: 0.35),
+                                            width: 1.5,
+                                          )
+                                        : null,
+                                    boxShadow: isSelected
+                                        ? [
+                                            BoxShadow(
+                                              color: const Color(0xFFFF6B35)
+                                                  .withValues(alpha: 0.4),
+                                              blurRadius: 16,
+                                              spreadRadius: 0,
+                                              offset: const Offset(0, 3),
+                                            ),
+                                          ]
+                                        : null,
+                                  ),
+                                  child: Icon(
+                                    item['icon'] as IconData,
+                                    color: isSelected
+                                        ? Colors.white
+                                        : Colors.white.withValues(alpha: 0.45),
+                                    size: isSelected ? 24 : 22,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                // Label
+                                Text(
+                                  item['label'] as String,
+                                  style: TextStyle(
+                                    color: isSelected
+                                        ? Colors.white
+                                        : Colors.white.withValues(alpha: 0.55),
+                                    fontSize: isSelected ? 9.5 : 8.5,
+                                    fontWeight: isSelected
+                                        ? FontWeight.w700
+                                        : FontWeight.w600,
+                                    letterSpacing: 0.1,
+                                    shadows: isSelected
+                                        ? [
+                                            Shadow(
+                                              color: Colors.black
+                                                  .withValues(alpha: 0.3),
+                                              blurRadius: 4,
+                                            ),
+                                          ]
+                                        : null,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+            ),
+          ),
+        ),
       ),
     );
   }

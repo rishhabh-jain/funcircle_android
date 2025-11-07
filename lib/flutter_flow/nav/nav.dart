@@ -7,6 +7,7 @@ import '/backend/backend.dart';
 
 
 import '/auth/base_auth_user_provider.dart';
+import '/auth/profile_completion_guard.dart';
 
 import '/backend/push_notifications/push_notifications_handler.dart'
     show PushNotificationsHandler;
@@ -86,19 +87,17 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
       navigatorKey: appNavigatorKey,
       errorBuilder: (context, state) => _RouteErrorBuilder(
         state: state,
-        child: appStateNotifier.loggedIn ? NavBarPage() : OnboardingWidget(),
+        child: appStateNotifier.loggedIn
+            ? ProfileCompletionGuard(child: NavBarPage())
+            : WelcomeScreen(),
       ),
       routes: [
         FFRoute(
           name: '_initialize',
           path: '/',
-          builder: (context, _) =>
-              appStateNotifier.loggedIn ? NavBarPage() : OnboardingWidget(),
-        ),
-        FFRoute(
-          name: OnboardingWidget.routeName,
-          path: OnboardingWidget.routePath,
-          builder: (context, params) => OnboardingWidget(),
+          builder: (context, _) => appStateNotifier.loggedIn
+              ? ProfileCompletionGuard(child: NavBarPage())
+              : WelcomeScreen(),
         ),
         FFRoute(
           name: OldProfile.MyProfileWidget.routeName,
@@ -191,29 +190,43 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
             ),
           ),
         ),
+        // New Auth Screens
         FFRoute(
-          name: SignupNewWidget.routeName,
-          path: SignupNewWidget.routePath,
-          builder: (context, params) => SignupNewWidget(),
+          name: WelcomeScreen.routeName,
+          path: WelcomeScreen.routePath,
+          builder: (context, params) => WelcomeScreen(),
         ),
         FFRoute(
-          name: OtpVerificationWidget.routeName,
-          path: OtpVerificationWidget.routePath,
-          builder: (context, params) => OtpVerificationWidget(
-            mobilenumber: params.getParam(
-              'mobilenumber',
+          name: PhoneAuthScreen.routeName,
+          path: PhoneAuthScreen.routePath,
+          builder: (context, params) => PhoneAuthScreen(),
+        ),
+        FFRoute(
+          name: OtpVerificationScreen.routeName,
+          path: OtpVerificationScreen.routePath,
+          builder: (context, params) => OtpVerificationScreen(
+            phoneNumber: params.getParam(
+              'phoneNumber',
               ParamType.String,
             ),
-            type: params.getParam(
-              'type',
-              ParamType.String,
-            ),
+          ),
+        ),
+        // Profile Setup Screens
+        FFRoute(
+          name: BasicInfoScreen.routeName,
+          path: BasicInfoScreen.routePath,
+          builder: (context, params) => BasicInfoScreen(),
+        ),
+        FFRoute(
+          name: SportsSelectionScreen.routeName,
+          path: SportsSelectionScreen.routePath,
+          builder: (context, params) => SportsSelectionScreen(
             name: params.getParam(
               'name',
               ParamType.String,
             ),
-            email: params.getParam(
-              'email',
+            gender: params.getParam(
+              'gender',
               ParamType.String,
             ),
           ),
@@ -474,11 +487,6 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
           name: HelpcenterWidget.routeName,
           path: HelpcenterWidget.routePath,
           builder: (context, params) => HelpcenterWidget(),
-        ),
-        FFRoute(
-          name: NotificationsWidget.routeName,
-          path: NotificationsWidget.routePath,
-          builder: (context, params) => NotificationsWidget(),
         ),
         FFRoute(
           name: WebviewWidget.routeName,
@@ -782,6 +790,11 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
               : VenuesNewWidget(),
         ),
         FFRoute(
+          name: VenueBookingWidget.routeName,
+          path: VenueBookingWidget.routePath,
+          builder: (context, params) => VenueBookingWidget(),
+        ),
+        FFRoute(
           name: SingleVenueNewWidget.routeName,
           path: SingleVenueNewWidget.routePath,
           builder: (context, params) => SingleVenueNewWidget(
@@ -836,19 +849,15 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
           builder: (context, params) => PlayerNewWidget(),
         ),
         FFRoute(
-          name: GameRequestsnewWidget.routeName,
-          path: GameRequestsnewWidget.routePath,
-          builder: (context, params) => GameRequestsnewWidget(),
-        ),
-        FFRoute(
           name: DuorequestsnewWidget.routeName,
           path: DuorequestsnewWidget.routePath,
           builder: (context, params) => DuorequestsnewWidget(),
         ),
+        // Old login removed - redirect to welcome screen
         FFRoute(
-          name: LoginNewWidget.routeName,
-          path: LoginNewWidget.routePath,
-          builder: (context, params) => LoginNewWidget(),
+          name: 'Login',
+          path: '/loginNew',
+          builder: (context, params) => WelcomeScreen(),
         ),
         FFRoute(
           name: ProfileMenuWidget.routeName,
@@ -894,6 +903,16 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
           name: MyPlayFriendsWidget.routeName,
           path: MyPlayFriendsWidget.routePath,
           builder: (context, params) => MyPlayFriendsWidget(),
+        ),
+        FFRoute(
+          name: NotificationsScreenWidget.routeName,
+          path: NotificationsScreenWidget.routePath,
+          builder: (context, params) => NotificationsScreenWidget(),
+        ),
+        FFRoute(
+          name: ReferralsScreenWidget.routeName,
+          path: ReferralsScreenWidget.routePath,
+          builder: (context, params) => ReferralsScreenWidget(),
         ),
         FFRoute(
           name: NewProfile.MyProfileWidget.routeName,

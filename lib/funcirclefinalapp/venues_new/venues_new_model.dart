@@ -12,6 +12,9 @@ class VenuesNewModel extends FlutterFlowModel<VenuesNewWidget> {
 
   int currentsportid = 90;
 
+  LatLng? userLocation;
+  String? locationDisplayText;
+
   List<VenuesRow> venuesdata = [];
   void addToVenuesdata(VenuesRow item) => venuesdata.add(item);
   void removeFromVenuesdata(VenuesRow item) => venuesdata.remove(item);

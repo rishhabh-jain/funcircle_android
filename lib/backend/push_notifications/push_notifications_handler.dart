@@ -393,7 +393,6 @@ final parametersBuilderMap =
   'findPlayersNew': ParameterData.none(),
   'chatsnew': ParameterData.none(),
   'playerNew': ParameterData.none(),
-  'GameRequestsnew': ParameterData.none(),
   'Duorequestsnew': ParameterData.none(),
   'LoginNew': ParameterData.none(),
 };

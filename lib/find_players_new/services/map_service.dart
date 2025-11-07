@@ -16,7 +16,8 @@ class MapService {
     try {
       final response = await _client
           .from('venues')
-          .select('id, venue_name, location, lat, lng, images, description')
+          .select(
+              'id, venue_name, location, lat, lng, images, description, sport_type')
           .not('lat', 'is', null)
           .not('lng', 'is', null);
 
@@ -37,7 +38,7 @@ class MapService {
   ) async {
     try {
       final response =
-          await _client.from('findplayers.user_locations').select('''
+          await _client.schema('findplayers').from('user_locations').select('''
             id,
             user_id,
             latitude,
@@ -45,22 +46,35 @@ class MapService {
             is_available,
             sport_type,
             skill_level,
-            updated_at,
-            user:user_id (
-              first_name,
-              profile_picture
-            )
+            updated_at
           ''').eq('is_available', true).eq('sport_type', sportType);
 
-      return (response as List).map((json) {
-        // Flatten user data
-        final userData = json['user'] as Map<String, dynamic>?;
-        return UserLocationModel.fromJson({
+      // Fetch user details separately for each location
+      final List<UserLocationModel> locations = [];
+      for (final json in (response as List)) {
+        final userId = json['user_id'] as String?;
+        Map<String, dynamic>? userData;
+
+        if (userId != null) {
+          try {
+            userData = await _client
+                .from('users')
+                .select('first_name, profile_picture')
+                .eq('user_id', userId)
+                .maybeSingle();
+          } catch (e) {
+            print('Error fetching user $userId: $e');
+          }
+        }
+
+        locations.add(UserLocationModel.fromJson({
           ...json,
           'user_name': userData?['first_name'],
           'user_profile_picture': userData?['profile_picture'],
-        });
-      }).toList();
+        }));
+      }
+
+      return locations;
     } catch (e) {
       print('Error fetching available players: $e');
       return [];
@@ -77,7 +91,7 @@ class MapService {
     int? skillLevel,
   }) async {
     try {
-      await _client.from('findplayers.user_locations').upsert({
+      await _client.schema('findplayers').from('user_locations').upsert({
         'user_id': userId,
         'latitude': latitude,
         'longitude': longitude,
@@ -97,11 +111,45 @@ class MapService {
   static Future<bool> setUserUnavailable(String userId) async {
     try {
       await _client
-          .from('findplayers.user_locations')
+          .schema('findplayers')
+          .from('user_locations')
           .update({'is_available': false}).eq('user_id', userId);
       return true;
     } catch (e) {
       print('Error setting user unavailable: $e');
+      return false;
+    }
+  }
+
+  /// Update user visibility on map
+  static Future<bool> updateUserVisibility({
+    required String userId,
+    required bool isAvailable,
+    required String sportType,
+    double? latitude,
+    double? longitude,
+  }) async {
+    try {
+      if (isAvailable && latitude != null && longitude != null) {
+        // User wants to be visible - upsert location
+        await _client.schema('findplayers').from('user_locations').upsert({
+          'user_id': userId,
+          'latitude': latitude,
+          'longitude': longitude,
+          'is_available': true,
+          'sport_type': sportType,
+          'updated_at': DateTime.now().toIso8601String(),
+        });
+      } else {
+        // User wants to be hidden - just update is_available
+        await _client
+            .schema('findplayers')
+            .from('user_locations')
+            .update({'is_available': false}).eq('user_id', userId);
+      }
+      return true;
+    } catch (e) {
+      print('Error updating user visibility: $e');
       return false;
     }
   }
@@ -114,7 +162,9 @@ class MapService {
   ) async {
     try {
       final response = await _client
-          .from('findplayers.player_requests')
+          .schema('findplayers')
+          .schema('findplayers')
+          .from('player_requests')
           .select('''
             id,
             user_id,
@@ -129,32 +179,44 @@ class MapService {
             description,
             status,
             created_at,
-            expires_at,
-            user:user_id (
-              first_name,
-              profile_picture,
-              skill_level_badminton,
-              skill_level_pickleball
-            )
+            expires_at
           ''')
           .eq('status', 'active')
           .eq('sport_type', sportType)
           .gt('expires_at', DateTime.now().toIso8601String());
 
-      return (response as List).map((json) {
-        // Flatten user data and get appropriate skill level
-        final userData = json['user'] as Map<String, dynamic>?;
+      // Fetch user details separately for each request
+      final List<PlayerRequestModel> requests = [];
+      for (final json in (response as List)) {
+        final userId = json['user_id'] as String?;
+        Map<String, dynamic>? userData;
+
+        if (userId != null) {
+          try {
+            userData = await _client
+                .from('users')
+                .select(
+                    'first_name, profile_picture, skill_level_badminton, skill_level_pickleball')
+                .eq('user_id', userId)
+                .maybeSingle();
+          } catch (e) {
+            print('Error fetching user $userId: $e');
+          }
+        }
+
         final int? userSkillLevel = sportType.toLowerCase() == 'badminton'
             ? (userData?['skill_level_badminton'] as int?)
             : (userData?['skill_level_pickleball'] as int?);
 
-        return PlayerRequestModel.fromJson({
+        requests.add(PlayerRequestModel.fromJson({
           ...json,
           'user_name': userData?['first_name'],
           'user_profile_picture': userData?['profile_picture'],
           'user_skill_level': userSkillLevel,
-        });
-      }).toList();
+        }));
+      }
+
+      return requests;
     } catch (e) {
       print('Error fetching active requests: $e');
       return [];
@@ -177,7 +239,8 @@ class MapService {
   }) async {
     try {
       final response = await _client
-          .from('findplayers.player_requests')
+          .schema('findplayers')
+          .from('player_requests')
           .insert({
             'user_id': userId,
             'sport_type': sportType,
@@ -209,7 +272,10 @@ class MapService {
     String? message,
   }) async {
     try {
-      await _client.from('findplayers.player_request_responses').insert({
+      await _client
+          .schema('findplayers')
+          .from('player_request_responses')
+          .insert({
         'request_id': requestId,
         'responder_id': responderId,
         'message': message,
@@ -222,6 +288,135 @@ class MapService {
     }
   }
 
+  /// Create an organized game in playnow schema (for 3+ players)
+  static Future<String?> createGame({
+    required String creatorId,
+    required String sportType,
+    int? venueId,
+    String? customLocation,
+    required int playersNeeded,
+    required String gameType,
+    required DateTime scheduledTime,
+    int? skillLevel,
+    double? costPerPlayer,
+    required bool isFree,
+    required String joinType,
+    required bool isWomenOnly,
+    required bool isMixedOnly,
+    required bool isVenueBooked,
+    String? description,
+    double? latitude,
+    double? longitude,
+  }) async {
+    try {
+      // Convert DateTime to date and time components
+      final gameDate = DateTime(
+        scheduledTime.year,
+        scheduledTime.month,
+        scheduledTime.day,
+      );
+      final startTime =
+          '${scheduledTime.hour.toString().padLeft(2, '0')}:${scheduledTime.minute.toString().padLeft(2, '0')}:00';
+
+      final response = await _client.schema('playnow').from('games').insert({
+        'created_by': creatorId,
+        'sport_type': sportType,
+        'game_date': gameDate.toIso8601String().split('T')[0],
+        'start_time': startTime,
+        'venue_id': venueId,
+        'custom_location': customLocation,
+        'players_needed': playersNeeded,
+        'current_players_count': 1, // Creator is automatically counted
+        'game_type': gameType,
+        'skill_level': skillLevel,
+        'cost_per_player': costPerPlayer,
+        'is_free': isFree,
+        'join_type': joinType,
+        'is_venue_booked': isVenueBooked,
+        'is_women_only': isWomenOnly,
+        'is_mixed_only': isMixedOnly,
+        'description': description,
+        'status': 'open',
+      }).select('id').single();
+
+      final gameId = response['id'] as String;
+
+      // Add creator as first participant
+      await _client.schema('playnow').from('game_participants').insert({
+        'game_id': gameId,
+        'user_id': creatorId,
+        'join_type': 'creator',
+        'payment_status': isFree ? 'waived' : 'pending',
+      });
+
+      return gameId;
+    } catch (e) {
+      print('Error creating game: $e');
+      return null;
+    }
+  }
+
+  // ==================== PLAYNOW GAMES ====================
+
+  /// Fetch open playnow games by sport type
+  static Future<List<Map<String, dynamic>>> getPlayNowGamesBySport(
+    String sportType,
+  ) async {
+    try {
+      final response = await _client.schema('playnow').from('games').select('''
+            id,
+            created_by,
+            sport_type,
+            game_date,
+            start_time,
+            venue_id,
+            custom_location,
+            players_needed,
+            current_players_count,
+            game_type,
+            skill_level,
+            cost_per_player,
+            is_free,
+            join_type,
+            is_women_only,
+            is_mixed_only,
+            description,
+            status,
+            created_at
+          ''').eq('sport_type', sportType).inFilter('status', ['open']);
+
+      // Fetch creator details separately for each game
+      final List<Map<String, dynamic>> games = [];
+      for (final json in (response as List)) {
+        final creatorId = json['created_by'] as String?;
+        Map<String, dynamic>? creatorData;
+
+        if (creatorId != null) {
+          try {
+            creatorData = await _client
+                .from('users')
+                .select('first_name, profile_picture')
+                .eq('user_id', creatorId)
+                .maybeSingle();
+          } catch (e) {
+            print('Error fetching creator $creatorId: $e');
+          }
+        }
+
+        games.add({
+          ...json,
+          'creator_name': creatorData?['first_name'],
+          'creator_profile_picture': creatorData?['profile_picture'],
+        });
+      }
+
+      return games;
+    } catch (e) {
+      print('Error fetching playnow games: $e');
+      return [];
+    }
+  }
+
   // ==================== GAME SESSIONS ====================
 
   /// Fetch open game sessions by sport type
@@ -230,7 +425,8 @@ class MapService {
   ) async {
     try {
       final response = await _client
-          .from('findplayers.game_sessions')
+          .schema('findplayers')
+          .from('game_sessions')
           .select('''
             id,
             creator_id,
@@ -249,25 +445,38 @@ class MapService {
             longitude,
             cost_per_player,
             notes,
-            created_at,
-            creator:creator_id (
-              first_name,
-              profile_picture
-            )
+            created_at
           ''')
           .eq('sport_type', sportType)
           .inFilter('status', ['open', 'full'])
           .gt('scheduled_time', DateTime.now().toIso8601String());
 
-      return (response as List).map((json) {
-        // Flatten creator data
-        final creatorData = json['creator'] as Map<String, dynamic>?;
-        return GameSessionModel.fromJson({
+      // Fetch creator details separately for each session
+      final List<GameSessionModel> sessions = [];
+      for (final json in (response as List)) {
+        final creatorId = json['creator_id'] as String?;
+        Map<String, dynamic>? creatorData;
+
+        if (creatorId != null) {
+          try {
+            creatorData = await _client
+                .from('users')
+                .select('first_name, profile_picture')
+                .eq('user_id', creatorId)
+                .maybeSingle();
+          } catch (e) {
+            print('Error fetching creator $creatorId: $e');
+          }
+        }
+
+        sessions.add(GameSessionModel.fromJson({
           ...json,
           'creator_name': creatorData?['first_name'],
           'creator_profile_picture': creatorData?['profile_picture'],
-        });
-      }).toList();
+        }));
+      }
+
+      return sessions;
     } catch (e) {
       print('Error fetching game sessions: $e');
       return [];
@@ -293,7 +502,8 @@ class MapService {
   }) async {
     try {
       final response = await _client
-          .from('findplayers.game_sessions')
+          .schema('findplayers')
+          .from('game_sessions')
           .insert({
             'creator_id': creatorId,
             'sport_type': sportType,
@@ -330,12 +540,14 @@ class MapService {
     try {
       // First, get the current session
       final session = await _client
-          .from('findplayers.game_sessions')
+          .schema('findplayers')
+          .from('game_sessions')
           .select('current_players, max_players, status')
           .eq('id', sessionId)
           .single();
 
-      final currentPlayers = List<String>.from(session['current_players'] ?? []);
+      final currentPlayers =
+          List<String>.from(session['current_players'] ?? []);
       final maxPlayers = session['max_players'] as int;
       final status = session['status'] as String;
 
@@ -361,7 +573,7 @@ class MapService {
       currentPlayers.add(userId);
       final newStatus = currentPlayers.length >= maxPlayers ? 'full' : 'open';
 
-      await _client.from('findplayers.game_sessions').update({
+      await _client.schema('findplayers').from('game_sessions').update({
         'current_players': currentPlayers,
         'status': newStatus,
       }).eq('id', sessionId);
@@ -381,12 +593,14 @@ class MapService {
     try {
       // Get the current session
       final session = await _client
-          .from('findplayers.game_sessions')
+          .schema('findplayers')
+          .from('game_sessions')
           .select('current_players, creator_id')
           .eq('id', sessionId)
           .single();
 
-      final currentPlayers = List<String>.from(session['current_players'] ?? []);
+      final currentPlayers =
+          List<String>.from(session['current_players'] ?? []);
       final creatorId = session['creator_id'] as String;
 
       // Check if user is in session
@@ -404,7 +618,7 @@ class MapService {
       // Remove user from session
       currentPlayers.remove(userId);
 
-      await _client.from('findplayers.game_sessions').update({
+      await _client.schema('findplayers').from('game_sessions').update({
         'current_players': currentPlayers,
         'status': 'open', // Session becomes open again
       }).eq('id', sessionId);
@@ -486,7 +700,8 @@ class MapService {
     String sportType,
   ) {
     return _client
-        .from('findplayers.player_requests')
+        .schema('findplayers')
+        .from('player_requests')
         .stream(primaryKey: ['id']).map((data) {
       return data
           .where((json) =>
@@ -501,7 +716,8 @@ class MapService {
     String sportType,
   ) {
     return _client
-        .from('findplayers.user_locations')
+        .schema('findplayers')
+        .from('user_locations')
         .stream(primaryKey: ['id']).map((data) {
       return data
           .where((json) =>
@@ -516,7 +732,8 @@ class MapService {
     String sportType,
   ) {
     return _client
-        .from('findplayers.game_sessions')
+        .schema('findplayers')
+        .from('game_sessions')
         .stream(primaryKey: ['id']).map((data) {
       return data
           .where((json) => json['sport_type'] == sportType)

@@ -9,9 +9,17 @@ class SingleVenueNewModel extends FlutterFlowModel<SingleVenueNewWidget> {
 
   bool showlevelcomponent = false;
 
-  @override
-  void initState(BuildContext context) {}
+  /// Image gallery state
+  PageController? imagePageController;
+  int currentImageIndex = 0;
 
   @override
-  void dispose() {}
+  void initState(BuildContext context) {
+    imagePageController = PageController(initialPage: 0);
+  }
+
+  @override
+  void dispose() {
+    imagePageController?.dispose();
+  }
 }

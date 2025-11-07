@@ -604,8 +604,7 @@ class _MyProfileWidgetState extends State<MyProfileWidget> {
                                                 'Container_navigate_to');
 
                                             context.pushNamed(
-                                                GameRequestsnewWidget
-                                                    .routeName);
+                                                'GameRequestsScreen');
                                           },
                                           child: Container(
                                             width: double.infinity,
@@ -753,8 +752,7 @@ class _MyProfileWidgetState extends State<MyProfileWidget> {
                                                         'Icon_navigate_to');
 
                                                     context.pushNamed(
-                                                        GameRequestsnewWidget
-                                                            .routeName);
+                                                        'GameRequestsScreen');
                                                   },
                                                   child: Icon(
                                                     Icons.arrow_forward_ios,

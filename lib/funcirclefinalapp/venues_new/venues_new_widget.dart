@@ -1,4 +1,5 @@
 import '/backend/supabase/supabase.dart';
+import '/custom_code/actions/index.dart' as actions;
 import '/flutter_flow/flutter_flow_choice_chips.dart';
 import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
@@ -37,6 +38,14 @@ class _VenuesNewWidgetState extends State<VenuesNewWidget> {
 
     // On page load action.
     SchedulerBinding.instance.addPostFrameCallback((_) async {
+      // Initialize location from FFAppState
+      if (FFAppState().locationDisplayText.isNotEmpty) {
+        safeSetState(() {
+          _model.userLocation = FFAppState().userLocation;
+          _model.locationDisplayText = FFAppState().locationDisplayText;
+        });
+      }
+
       logFirebaseEvent('VenuesNew_backend_call');
       _model.venuesoutput = await VenuesTable().queryRows(
         queryFn: (q) => q,
@@ -98,48 +107,52 @@ class _VenuesNewWidgetState extends State<VenuesNewWidget> {
                             context.safePop();
                           },
                         ),
-                        Container(
-                          decoration: BoxDecoration(),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.max,
-                            children: [
-                              Icon(
-                                FFIcons.kmapPin,
-                                color: Color(0xFFACABB0),
-                                size: 24.0,
-                              ),
-                              Padding(
-                                padding: EdgeInsetsDirectional.fromSTEB(
-                                    8.0, 0.0, 0.0, 0.0),
-                                child: Text(
-                                  FFLocalizations.of(context).getText(
-                                    'dghnk4n4' /* Gurugram */,
-                                  ),
-                                  style: FlutterFlowTheme.of(context)
-                                      .bodyMedium
-                                      .override(
-                                        fontFamily: FlutterFlowTheme.of(context)
-                                            .bodyMediumFamily,
-                                        color: Color(0xFFF7F6FC),
-                                        fontSize: 16.0,
-                                        letterSpacing: 0.0,
-                                        fontWeight: FontWeight.w600,
-                                        useGoogleFonts:
-                                            !FlutterFlowTheme.of(context)
-                                                .bodyMediumIsCustom,
-                                      ),
-                                ),
-                              ),
-                              Padding(
-                                padding: EdgeInsetsDirectional.fromSTEB(
-                                    4.0, 0.0, 0.0, 0.0),
-                                child: Icon(
-                                  Icons.keyboard_arrow_down,
+                        InkWell(
+                          onTap: _showLocationDialog,
+                          child: Container(
+                            decoration: BoxDecoration(),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.max,
+                              children: [
+                                Icon(
+                                  FFIcons.kmapPin,
                                   color: Color(0xFFACABB0),
                                   size: 24.0,
                                 ),
-                              ),
-                            ],
+                                Padding(
+                                  padding: EdgeInsetsDirectional.fromSTEB(
+                                      8.0, 0.0, 0.0, 0.0),
+                                  child: Text(
+                                    _model.locationDisplayText ??
+                                        FFLocalizations.of(context).getText(
+                                          'dghnk4n4' /* Gurugram */,
+                                        ),
+                                    style: FlutterFlowTheme.of(context)
+                                        .bodyMedium
+                                        .override(
+                                          fontFamily: FlutterFlowTheme.of(context)
+                                              .bodyMediumFamily,
+                                          color: Color(0xFFF7F6FC),
+                                          fontSize: 16.0,
+                                          letterSpacing: 0.0,
+                                          fontWeight: FontWeight.w600,
+                                          useGoogleFonts:
+                                              !FlutterFlowTheme.of(context)
+                                                  .bodyMediumIsCustom,
+                                        ),
+                                  ),
+                                ),
+                                Padding(
+                                  padding: EdgeInsetsDirectional.fromSTEB(
+                                      4.0, 0.0, 0.0, 0.0),
+                                  child: Icon(
+                                    Icons.keyboard_arrow_down,
+                                    color: Color(0xFFACABB0),
+                                    size: 24.0,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ],
@@ -782,6 +795,237 @@ class _VenuesNewWidgetState extends State<VenuesNewWidget> {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Show location selector dialog
+  Future<void> _showLocationDialog() async {
+    return showDialog(
+      context: context,
+      builder: (dialogContext) => _LocationSearchDialog(
+        currentLocation: _model.locationDisplayText,
+        onLocationSelected: (placeId, description, latLng) async {
+          safeSetState(() {
+            _model.userLocation = latLng;
+            _model.locationDisplayText = description;
+          });
+
+          // Update app state
+          FFAppState().update(() {
+            FFAppState().userLocation = latLng;
+            FFAppState().userLatitude = latLng.latitude;
+            FFAppState().userLongitude = latLng.longitude;
+            FFAppState().locationDisplayText = description;
+          });
+        },
+      ),
+    );
+  }
+}
+
+/// Location search dialog widget
+class _LocationSearchDialog extends StatefulWidget {
+  final String? currentLocation;
+  final Function(String placeId, String description, LatLng latLng)
+      onLocationSelected;
+
+  const _LocationSearchDialog({
+    this.currentLocation,
+    required this.onLocationSelected,
+  });
+
+  @override
+  State<_LocationSearchDialog> createState() => _LocationSearchDialogState();
+}
+
+class _LocationSearchDialogState extends State<_LocationSearchDialog> {
+  final TextEditingController _searchController = TextEditingController();
+  List<dynamic> _predictions = [];
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _searchPlaces(String input) async {
+    if (input.isEmpty) {
+      setState(() {
+        _predictions = [];
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      final predictions = await actions.searchPlaces(input);
+      if (mounted) {
+        setState(() {
+          _predictions = predictions;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      print('Error searching places: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _selectPlace(String placeId, String description) async {
+    try {
+      final coordinates = await actions.geocodePlace(placeId);
+      if (coordinates != null && mounted) {
+        widget.onLocationSelected(placeId, description, coordinates);
+        Navigator.of(context).pop();
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Unable to get coordinates for this location'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('Error selecting place: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: Color(0xFF1C1C1E),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16.0),
+      ),
+      title: Text(
+        'Select Location',
+        style: FlutterFlowTheme.of(context).headlineSmall.override(
+              fontFamily: FlutterFlowTheme.of(context).headlineSmallFamily,
+              color: Colors.white,
+              letterSpacing: 0.0,
+              useGoogleFonts:
+                  !FlutterFlowTheme.of(context).headlineSmallIsCustom,
+            ),
+      ),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _searchController,
+              onChanged: _searchPlaces,
+              style: FlutterFlowTheme.of(context).bodyMedium.override(
+                    fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                    color: Colors.white,
+                    letterSpacing: 0.0,
+                    useGoogleFonts:
+                        !FlutterFlowTheme.of(context).bodyMediumIsCustom,
+                  ),
+              decoration: InputDecoration(
+                hintText: 'Search for sector, city, or area',
+                hintStyle: FlutterFlowTheme.of(context).bodyMedium.override(
+                      fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                      color: Colors.white.withValues(alpha: 0.5),
+                      letterSpacing: 0.0,
+                      useGoogleFonts:
+                          !FlutterFlowTheme.of(context).bodyMediumIsCustom,
+                    ),
+                prefixIcon: Icon(Icons.search,
+                    color: Colors.white.withValues(alpha: 0.7)),
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.1),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12.0),
+                  borderSide: BorderSide.none,
+                ),
+              ),
+            ),
+            SizedBox(height: 16.0),
+            if (_isLoading)
+              CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  FlutterFlowTheme.of(context).primary,
+                ),
+              )
+            else if (_predictions.isNotEmpty)
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: 300),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _predictions.length,
+                  itemBuilder: (context, index) {
+                    final prediction = _predictions[index];
+                    final description = prediction['description'] ?? '';
+                    final placeId = prediction['place_id'] ?? '';
+
+                    return InkWell(
+                      onTap: () => _selectPlace(placeId, description),
+                      child: Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 12.0,
+                          vertical: 12.0,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.1),
+                              width: 1,
+                            ),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.location_on,
+                              color: FlutterFlowTheme.of(context).primary,
+                              size: 20,
+                            ),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                description,
+                                style: FlutterFlowTheme.of(context)
+                                    .bodyMedium
+                                    .override(
+                                      fontFamily: FlutterFlowTheme.of(context)
+                                          .bodyMediumFamily,
+                                      color: Colors.white,
+                                      letterSpacing: 0.0,
+                                      useGoogleFonts:
+                                          !FlutterFlowTheme.of(context)
+                                              .bodyMediumIsCustom,
+                                    ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+          ],
         ),
       ),
     );

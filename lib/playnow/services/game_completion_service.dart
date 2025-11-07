@@ -106,9 +106,8 @@ class GameCompletionService {
       // Get all participants except current user
       final response = await _client
           .schema('playnow').from('game_participants')
-          .select('user_id, users!game_participants_user_id_fkey(display_name, photo_url)')
+          .select('user_id, users!game_participants_user_id_fkey(first_name, profile_picture)')
           .eq('game_id', gameId)
-          .eq('status', 'confirmed')
           .neq('user_id', currentUserId) as List;
 
       final players = <RatablePlayer>[];
@@ -128,8 +127,8 @@ class GameCompletionService {
 
         players.add(RatablePlayer(
           userId: userId,
-          displayName: userData?['display_name'] as String? ?? 'Unknown',
-          photoUrl: userData?['photo_url'] as String?,
+          displayName: userData?['first_name'] as String? ?? 'Unknown',
+          photoUrl: userData?['profile_picture'] as String?,
           isRated: ratingExists != null,
         ));
       }

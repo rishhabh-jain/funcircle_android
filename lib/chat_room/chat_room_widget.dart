@@ -561,13 +561,90 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                                               ),
                                             ),
                                           // Message bubble
-                                          Container(
-                                            constraints: BoxConstraints(
-                                              maxWidth: MediaQuery.sizeOf(context)
-                                                      .width *
-                                                  0.7,
-                                            ),
-                                            decoration: BoxDecoration(
+                                          GestureDetector(
+                                            onLongPress: !isMe ? () {
+                                              // Show report dialog for other users' messages
+                                              showDialog(
+                                                context: context,
+                                                builder: (dialogContext) => AlertDialog(
+                                                  backgroundColor: FlutterFlowTheme.of(context).secondaryBackground,
+                                                  title: Text(
+                                                    'Report Message',
+                                                    style: FlutterFlowTheme.of(context).headlineSmall.override(
+                                                      fontFamily: FlutterFlowTheme.of(context).headlineSmallFamily,
+                                                      color: FlutterFlowTheme.of(context).tertiary,
+                                                      letterSpacing: 0.0,
+                                                      useGoogleFonts: !FlutterFlowTheme.of(context).headlineSmallIsCustom,
+                                                    ),
+                                                  ),
+                                                  content: Text(
+                                                    'Report this message as inappropriate?',
+                                                    style: FlutterFlowTheme.of(context).bodyMedium.override(
+                                                      fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                                                      color: FlutterFlowTheme.of(context).secondaryText,
+                                                      letterSpacing: 0.0,
+                                                      useGoogleFonts: !FlutterFlowTheme.of(context).bodyMediumIsCustom,
+                                                    ),
+                                                  ),
+                                                  actions: [
+                                                    TextButton(
+                                                      onPressed: () => Navigator.pop(dialogContext),
+                                                      child: Text(
+                                                        'Cancel',
+                                                        style: TextStyle(color: FlutterFlowTheme.of(context).secondaryText),
+                                                      ),
+                                                    ),
+                                                    TextButton(
+                                                      onPressed: () async {
+                                                        try {
+                                                          // Add report to database (chat schema)
+                                                          await SupaFlow.client
+                                                              .schema('chat')
+                                                              .from('message_reports')
+                                                              .insert({
+                                                            'message_id': message.id,
+                                                            'room_id': widget.roomId,
+                                                            'reporter_id': currentUserUid,
+                                                            'reported_user_id': message.senderId,
+                                                            'created_at': DateTime.now().toIso8601String(),
+                                                          });
+
+                                                          Navigator.pop(dialogContext);
+
+                                                          ScaffoldMessenger.of(context).showSnackBar(
+                                                            SnackBar(
+                                                              content: Text('Message reported successfully'),
+                                                              backgroundColor: FlutterFlowTheme.of(context).success,
+                                                            ),
+                                                          );
+                                                        } catch (e) {
+                                                          print('Error reporting message: $e');
+                                                          Navigator.pop(dialogContext);
+
+                                                          ScaffoldMessenger.of(context).showSnackBar(
+                                                            SnackBar(
+                                                              content: Text('Failed to report message'),
+                                                              backgroundColor: FlutterFlowTheme.of(context).error,
+                                                            ),
+                                                          );
+                                                        }
+                                                      },
+                                                      child: Text(
+                                                        'Report',
+                                                        style: TextStyle(color: FlutterFlowTheme.of(context).error),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              );
+                                            } : null,
+                                            child: Container(
+                                              constraints: BoxConstraints(
+                                                maxWidth: MediaQuery.sizeOf(context)
+                                                        .width *
+                                                    0.7,
+                                              ),
+                                              decoration: BoxDecoration(
                                               gradient: isMe
                                                   ? LinearGradient(
                                                       colors: [
@@ -659,6 +736,7 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                                                   ),
                                                 ],
                                               ),
+                                            ),
                                             ),
                                           ),
                                         ],

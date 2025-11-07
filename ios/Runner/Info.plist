@@ -61,9 +61,17 @@
 	<false/>
 
 	<key>NSLocationWhenInUseUsageDescription</key>
-    <string>We need your location to show nearby venues</string>
+    <string>Fun Circle uses your location to help you find and book nearby badminton and pickleball venues. Specifically:
+• Find Players: Shows courts and active game requests within 5km of your current location on an interactive map
+• Venue Discovery: Filters venues by distance and shows directions to courts
+• Quick Match: Connects you with nearby players available for games right now
+Your location is only used while the app is open and is never shared with other users without your permission.</string>
 	<key>NSCameraUsageDescription</key>
-    <string>In order to make games more memorable, we take pictures</string>
+    <string>Fun Circle uses your camera for these specific features:
+• Profile Setup: Take or upload photos for your player profile during account creation
+• Game Memories: Capture and share photos of games with your playing partners in the Chat feature
+• Profile Updates: Update your profile picture any time from the Settings screen
+Photos are stored securely and you have full control over what you share.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
     <string>Upload good images to increase your profile visibility</string>
 

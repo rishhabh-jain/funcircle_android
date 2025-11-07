@@ -86,7 +86,8 @@ class QuickMatchService {
   ) async {
     try {
       final response = await _client
-          .from('findplayers.user_locations')
+          .schema('findplayers')
+          .from('user_locations')
           .select('''
             id,
             user_id,
@@ -95,24 +96,38 @@ class QuickMatchService {
             is_available,
             sport_type,
             skill_level,
-            updated_at,
-            user:user_id (
-              first_name,
-              profile_picture
-            )
+            updated_at
           ''')
           .eq('is_available', true)
           .eq('sport_type', sportType)
           .neq('user_id', excludeUserId);
 
-      return (response as List).map((json) {
-        final userData = json['user'] as Map<String, dynamic>?;
-        return UserLocationModel.fromJson({
+      // Fetch user details separately for each location
+      final List<UserLocationModel> locations = [];
+      for (final json in (response as List)) {
+        final userId = json['user_id'] as String?;
+        Map<String, dynamic>? userData;
+
+        if (userId != null) {
+          try {
+            userData = await _client
+                .from('users')
+                .select('first_name, profile_picture')
+                .eq('user_id', userId)
+                .maybeSingle();
+          } catch (e) {
+            print('Error fetching user $userId: $e');
+          }
+        }
+
+        locations.add(UserLocationModel.fromJson({
           ...json,
           'user_name': userData?['first_name'],
           'user_profile_picture': userData?['profile_picture'],
-        });
-      }).toList();
+        }));
+      }
+
+      return locations;
     } catch (e) {
       print('Error fetching available players: $e');
       return [];
@@ -189,7 +204,7 @@ class QuickMatchService {
     double? compatibilityScore,
   }) async {
     try {
-      await _client.from('findplayers.match_history').insert({
+      await _client.schema('findplayers').from('match_history').insert({
         'user1_id': userId,
         'user2_id': matchedUserId,
         'sport_type': sportType,
@@ -212,7 +227,8 @@ class QuickMatchService {
   }) async {
     try {
       final response = await _client
-          .from('findplayers.match_preferences')
+          .schema('findplayers')
+          .from('match_preferences')
           .select()
           .eq('user_id', userId)
           .eq('sport_type', sportType)
@@ -235,7 +251,7 @@ class QuickMatchService {
     bool? notificationEnabled,
   }) async {
     try {
-      await _client.from('findplayers.match_preferences').upsert({
+      await _client.schema('findplayers').from('match_preferences').upsert({
         'user_id': userId,
         'sport_type': sportType,
         if (maxDistanceKm != null) 'max_distance_km': maxDistanceKm,
@@ -249,6 +265,118 @@ class QuickMatchService {
     } catch (e) {
       print('Error updating user preferences: $e');
       return false;
+    }
+  }
+
+  /// Cancel a player request (creator only)
+  static Future<bool> cancelRequest({
+    required String requestId,
+    required String userId,
+  }) async {
+    try {
+      // Get request info
+      final requestData = await _client
+          .schema('findplayers')
+          .from('player_requests')
+          .select()
+          .eq('id', requestId)
+          .single();
+
+      // Verify user is the creator
+      if (requestData['user_id'] != userId) {
+        throw Exception('Only the request creator can cancel the request');
+      }
+
+      // Check if request can be cancelled
+      final status = requestData['status'] as String;
+      if (status == 'fulfilled' || status == 'expired') {
+        throw Exception('Cannot cancel a fulfilled or expired request');
+      }
+
+      // Update request status
+      await _client
+          .schema('findplayers')
+          .from('player_requests')
+          .update({'status': 'cancelled'})
+          .eq('id', requestId);
+
+      // TODO: Notify interested users
+
+      return true;
+    } catch (e) {
+      print('Error cancelling request: $e');
+      rethrow;
+    }
+  }
+
+  /// Edit a player request (creator only)
+  static Future<bool> editRequest({
+    required String requestId,
+    required String userId,
+    DateTime? scheduledTime,
+    int? venueId,
+    String? customLocation,
+    double? latitude,
+    double? longitude,
+    int? playersNeeded,
+    int? skillLevel,
+    String? description,
+  }) async {
+    try {
+      // Get request info
+      final requestData = await _client
+          .schema('findplayers')
+          .from('player_requests')
+          .select()
+          .eq('id', requestId)
+          .single();
+
+      // Verify user is the creator
+      if (requestData['user_id'] != userId) {
+        throw Exception('Only the request creator can edit the request');
+      }
+
+      // Check if request can be edited
+      final status = requestData['status'] as String;
+      if (status == 'fulfilled' || status == 'expired' || status == 'cancelled') {
+        throw Exception('Cannot edit a fulfilled, expired, or cancelled request');
+      }
+
+      // Build update map
+      final updates = <String, dynamic>{};
+
+      if (scheduledTime != null) {
+        updates['scheduled_time'] = scheduledTime.toIso8601String();
+        // Update expiry time (24 hours after scheduled time or current time, whichever is later)
+        final expiresAt = scheduledTime.isAfter(DateTime.now())
+            ? scheduledTime.add(const Duration(hours: 24))
+            : DateTime.now().add(const Duration(hours: 24));
+        updates['expires_at'] = expiresAt.toIso8601String();
+      }
+      if (venueId != null) updates['venue_id'] = venueId;
+      if (customLocation != null) updates['custom_location'] = customLocation;
+      if (latitude != null) updates['latitude'] = latitude;
+      if (longitude != null) updates['longitude'] = longitude;
+      if (playersNeeded != null) updates['players_needed'] = playersNeeded;
+      if (skillLevel != null) updates['skill_level'] = skillLevel;
+      if (description != null) updates['description'] = description;
+
+      // Add edit tracking
+      updates['last_edited_at'] = DateTime.now().toIso8601String();
+
+      // Update request
+      await _client
+          .schema('findplayers')
+          .from('player_requests')
+          .update(updates)
+          .eq('id', requestId);
+
+      // TODO: Notify interested users about changes
+
+      return true;
+    } catch (e) {
+      print('Error editing request: $e');
+      rethrow;
     }
   }
 }

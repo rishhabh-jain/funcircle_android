@@ -109,17 +109,31 @@ class BookingsService {
       }
 
       // ============ FETCH FROM NEW SYSTEM (playnow/games) ============
+      // NOTE: Only fetch OFFICIAL FUNCIRCLE games for bookings (is_official = TRUE)
       try {
-        print('Fetching from NEW system (playnow/games)...');
+        print('Fetching from NEW system (playnow/games)... OFFICIAL FUNCIRCLE GAMES ONLY');
+
+        // First, get all participants for this user to see what we have
+        final allParticipants = await _supabase
+            .schema('playnow')
+            .from('game_participants')
+            .select('game_id, payment_status, payment_amount')
+            .eq('user_id', userId);
+
+        print('DEBUG: Total game_participants for user: ${(allParticipants as List).length}');
+        for (final p in allParticipants) {
+          print('  - game_id: ${p['game_id']}, payment_status: ${p['payment_status']}, amount: ${p['payment_amount']}');
+        }
 
         var newQuery = _supabase
+            .schema('playnow')
             .from('game_participants')
             .select('''
               game_id,
               joined_at,
               payment_status,
               payment_amount,
-              games!inner(
+              games:game_id!inner(
                 id,
                 sport_type,
                 game_date,
@@ -129,15 +143,12 @@ class BookingsService {
                 status,
                 game_type,
                 cost_per_player,
-                title,
-                venues!inner(
-                  id,
-                  venue_name,
-                  location
-                )
+                is_official
               )
             ''')
-            .eq('user_id', userId);
+            .eq('user_id', userId)
+            .filter('games.is_official', 'eq', true) // Only official FunCircle games
+            .eq('payment_status', 'paid'); // And must be paid
 
         // Apply status filters for new system
         if (filter != null && filter != 'all') {
@@ -163,7 +174,6 @@ class BookingsService {
             final game = participant['games'];
             if (game == null) continue;
 
-            final venue = game['venues'];
             final gameDate = game['game_date'] as String;
             final startTime = game['start_time'] as String;
             final endTime = game['end_time'] as String;
@@ -193,13 +203,35 @@ class BookingsService {
                 bookingStatus = 'confirmed';
             }
 
+            // Fetch venue details if venue_id exists
+            String venueName = 'Venue';
+            String venueLocation = 'Location';
+            String venueIdStr = '';
+            final venueId = game['venue_id'];
+            if (venueId != null) {
+              try {
+                final venueData = await _supabase
+                    .from('venues')
+                    .select('id, venue_name, location')
+                    .eq('id', venueId)
+                    .maybeSingle();
+                if (venueData != null) {
+                  venueIdStr = venueData['id']?.toString() ?? '';
+                  venueName = venueData['venue_name'] as String? ?? 'Venue';
+                  venueLocation = venueData['location'] as String? ?? 'Location';
+                }
+              } catch (e) {
+                print('Error fetching venue $venueId: $e');
+              }
+            }
+
             final booking = Booking(
               orderId: 'game-${game['id']}',
               gameTitle: game['title'] ?? '${game['game_type'] ?? 'Game'} Match',
               gameSport: game['sport_type'] ?? 'Badminton',
-              venueId: venue?['id']?.toString() ?? '',
-              venueName: venue?['venue_name'] ?? 'Venue',
-              venueLocation: venue?['location'] ?? 'Location',
+              venueId: venueIdStr,
+              venueName: venueName,
+              venueLocation: venueLocation,
               startDateTime: startDateTime,
               endDateTime: endDateTime,
               bookedAt: joinedAt,

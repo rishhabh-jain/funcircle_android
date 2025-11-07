@@ -13,6 +13,7 @@ import 'widgets/session_info_sheet.dart';
 import 'widgets/create_request_sheet.dart';
 import 'widgets/filter_sheet.dart';
 import 'widgets/quick_match_sheet.dart';
+import 'widgets/requests_bottom_panel.dart';
 import 'services/location_service.dart';
 export 'find_players_new_model.dart';
 
@@ -69,7 +70,7 @@ class _FindPlayersNewWidgetState extends State<FindPlayersNewWidget> {
         resizeToAvoidBottomInset: false,
         backgroundColor: FlutterFlowTheme.of(context).primaryBackground,
         body: SafeArea(
-          top: true,
+          top: false,
           child: Stack(
             children: [
               // Google Map with custom markers
@@ -143,15 +144,15 @@ class _FindPlayersNewWidgetState extends State<FindPlayersNewWidget> {
 
               // Top bar with sport toggle
               Positioned(
-                top: 16,
+                top: MediaQuery.of(context).padding.top + 16,
                 left: 16,
                 right: 16,
                 child: _buildTopBar(),
               ),
 
-              // Filter, Quick Match, and Heat Map buttons
+              // Filter, Quick Match, Heat Map, and Visibility buttons
               Positioned(
-                top: 80,
+                top: MediaQuery.of(context).padding.top + 80,
                 right: 16,
                 child: Column(
                   children: [
@@ -160,6 +161,8 @@ class _FindPlayersNewWidgetState extends State<FindPlayersNewWidget> {
                     _buildQuickMatchButton(),
                     const SizedBox(height: 8),
                     _buildHeatMapToggleButton(),
+                    const SizedBox(height: 8),
+                    _buildVisibilityToggleButton(),
                   ],
                 ),
               ),
@@ -178,22 +181,83 @@ class _FindPlayersNewWidgetState extends State<FindPlayersNewWidget> {
                   ),
                 ),
 
-              // Legend
+              // Recenter to user location button
               Positioned(
-                bottom: 100,
-                left: 16,
-                child: _buildLegend(),
+                bottom: 380,
+                right: 16,
+                child: _buildRecenterButton(),
+              ),
+
+              // Bottom panel with requests
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: RequestsBottomPanel(
+                  requests: _model.filteredRequests,
+                  sessions: _model.filteredSessions,
+                  playNowGames: _model.filteredPlayNowGames,
+                  currentUserId: currentUserUid ?? '',
+                  userLocation: _model.userLocation,
+                  onExpand: () {
+                    safeSetState(() {});
+                  },
+                ),
               ),
             ],
           ),
         ),
-        floatingActionButton: FloatingActionButton.extended(
-          onPressed: _showCreateRequest,
-          backgroundColor: FlutterFlowTheme.of(context).primary,
-          icon: const Icon(Icons.add, color: Colors.white),
-          label: const Text(
-            'Create Request',
-            style: TextStyle(color: Colors.white),
+        floatingActionButton: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(30),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFFF6B35).withValues(alpha: 0.4),
+                blurRadius: 15,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(30),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [
+                      Color(0xFFFF6B35),
+                      Color(0xFFF7931E),
+                    ],
+                  ),
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    onTap: _showCreateRequest,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 14),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: const [
+                          Icon(Icons.add, color: Colors.white, size: 22),
+                          SizedBox(width: 8),
+                          Text(
+                            'Create Request',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -234,10 +298,10 @@ class _FindPlayersNewWidgetState extends State<FindPlayersNewWidget> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Expanded(
-                child: _buildSportButton('Badminton', Icons.sports_tennis),
+                child: _buildSportButton('badminton', Icons.sports_tennis),
               ),
               Expanded(
-                child: _buildSportButton('Pickleball', Icons.sports_baseball),
+                child: _buildSportButton('pickleball', Icons.sports_baseball),
               ),
             ],
           ),
@@ -249,6 +313,9 @@ class _FindPlayersNewWidgetState extends State<FindPlayersNewWidget> {
   /// Build sport toggle button
   Widget _buildSportButton(String sport, IconData icon) {
     final isSelected = _model.currentSport == sport;
+    // Capitalize first letter for display
+    final displayText = sport[0].toUpperCase() + sport.substring(1);
+
     return GestureDetector(
       onTap: () async {
         if (!isSelected) {
@@ -289,7 +356,7 @@ class _FindPlayersNewWidgetState extends State<FindPlayersNewWidget> {
             ),
             const SizedBox(width: 8),
             Text(
-              sport,
+              displayText,
               style: TextStyle(
                 color: Colors.white,
                 fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
@@ -422,6 +489,56 @@ class _FindPlayersNewWidgetState extends State<FindPlayersNewWidget> {
     );
   }
 
+  /// Build visibility toggle button
+  Widget _buildVisibilityToggleButton() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: _model.isUserVisibleOnMap
+                  ? [
+                      const Color(0xFF4CAF50).withValues(alpha: 0.8),
+                      const Color(0xFF2E7D32).withValues(alpha: 0.7),
+                    ]
+                  : [
+                      Colors.black.withValues(alpha: 0.7),
+                      Colors.black.withValues(alpha: 0.85),
+                    ],
+            ),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.3),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: _model.isUserVisibleOnMap
+                    ? const Color(0xFF4CAF50).withValues(alpha: 0.4)
+                    : Colors.black.withValues(alpha: 0.4),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: IconButton(
+            icon: Icon(
+              _model.isUserVisibleOnMap
+                  ? Icons.visibility
+                  : Icons.visibility_off,
+              color: Colors.white,
+            ),
+            onPressed: _toggleUserVisibility,
+            tooltip:
+                _model.isUserVisibleOnMap ? 'Hide from Map' : 'Show on Map',
+          ),
+        ),
+      ),
+    );
+  }
+
   /// Build map legend
   Widget _buildLegend() {
     return ClipRRect(
@@ -491,6 +608,43 @@ class _FindPlayersNewWidgetState extends State<FindPlayersNewWidget> {
                 ),
           ),
         ],
+      ),
+    );
+  }
+
+  /// Build recenter to user location button
+  Widget _buildRecenterButton() {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                Colors.black.withValues(alpha: 0.7),
+                Colors.black.withValues(alpha: 0.85),
+              ],
+            ),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: 0.3),
+              width: 1,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.4),
+                blurRadius: 10,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: IconButton(
+            icon: const Icon(Icons.my_location, color: Colors.white),
+            onPressed: _recenterToUserLocation,
+            tooltip: 'Recenter to my location',
+          ),
+        ),
       ),
     );
   }
@@ -658,9 +812,80 @@ class _FindPlayersNewWidgetState extends State<FindPlayersNewWidget> {
     );
   }
 
+  /// Recenter map to user's current location
+  Future<void> _recenterToUserLocation() async {
+    if (_model.userLocation == null) {
+      // Try to get location again if not available
+      await _model.getUserLocation();
+      if (_model.userLocation == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+                'Unable to get your location. Please enable location services.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+        return;
+      }
+    }
+
+    // Animate camera to user location
+    final controller = await _model.googleMapsController.future;
+    controller.animateCamera(
+      gmaps.CameraUpdate.newLatLngZoom(
+        gmaps.LatLng(
+          _model.userLocation!.latitude,
+          _model.userLocation!.longitude,
+        ),
+        15.0,
+      ),
+    );
+  }
+
   /// Toggle heat map visualization
   Future<void> _toggleHeatMap() async {
     await _model.toggleHeatMap();
     safeSetState(() {});
+  }
+
+  /// Toggle user visibility on map
+  Future<void> _toggleUserVisibility() async {
+    final userId = currentUserUid;
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please sign in to use this feature'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    if (_model.userLocation == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please enable location services'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
+    await _model.toggleUserVisibility(userId);
+    safeSetState(() {});
+
+    // Show feedback to user
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _model.isUserVisibleOnMap
+              ? 'You are now visible on the map'
+              : 'You are now hidden from the map',
+        ),
+        backgroundColor:
+            _model.isUserVisibleOnMap ? const Color(0xFF4CAF50) : Colors.grey,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 }

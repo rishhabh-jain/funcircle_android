@@ -1,220 +1,256 @@
 import 'package:flutter/material.dart';
-import '/flutter_flow/flutter_flow_theme.dart';
+import 'dart:ui';
 import '../models/game_model.dart';
+import '../pages/game_details_page.dart';
 
 /// Card displaying a game with key information
 class GameCard extends StatelessWidget {
   final Game game;
-  final VoidCallback onTap;
-  final bool showJoinButton;
-  final VoidCallback? onJoinTap;
+  final VoidCallback? onTap;
 
   const GameCard({
     super.key,
     required this.game,
-    required this.onTap,
-    this.showJoinButton = true,
-    this.onJoinTap,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      shape: RoundedRectangleBorder(
+    return InkWell(
+      onTap: onTap ??
+          () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => GameDetailsPage(gameId: game.id),
+              ),
+            );
+          },
+      borderRadius: BorderRadius.circular(16),
+      child: ClipRRect(
         borderRadius: BorderRadius.circular(16),
-      ),
-      elevation: 2,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header row
-              Row(
-                children: [
-                  // Sport icon
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.15),
+                width: 1,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Fun Circle Badge - Full width at top
+                if (game.isFunCircleOrganized)
                   Container(
-                    width: 48,
-                    height: 48,
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
-                      color: _getSportColor().withValues(alpha: 0.1),
-                      shape: BoxShape.circle,
+                      gradient: LinearGradient(
+                        colors: [
+                          Colors.greenAccent.shade400.withValues(alpha: 0.9),
+                          Colors.greenAccent.shade200.withValues(alpha: 0.8),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(16),
+                        topRight: Radius.circular(16),
+                      ),
                     ),
-                    child: Icon(
-                      Icons.sports,
-                      color: _getSportColor(),
-                      size: 24,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-
-                  // Game info
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Text(
-                          game.autoTitle,
-                          style: FlutterFlowTheme.of(context).titleMedium.override(
-                                fontFamily: 'Readex Pro',
-                                fontSize: 16,
-                              ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        Icon(
+                          Icons.verified_rounded,
+                          size: 15,
+                          color: Colors.black87,
                         ),
-                        const SizedBox(height: 4),
+                        const SizedBox(width: 7),
                         Text(
-                          game.locationDisplay,
-                          style: FlutterFlowTheme.of(context).bodySmall.override(
-                                fontFamily: 'Readex Pro',
-                                color: Colors.grey,
-                                fontSize: 12,
-                              ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          'FunCircle PlayTime',
+                          style: TextStyle(
+                            color: Colors.black87,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.5,
+                          ),
                         ),
                       ],
                     ),
                   ),
 
-                  // Status badge
-                  _buildStatusBadge(),
-                ],
-              ),
-              const SizedBox(height: 16),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Header row - Sport icon + Title + Arrow
+                      Row(
+                        children: [
+                          // Sport icon
+                          Icon(
+                            _getSportIcon(),
+                            color: _getSportColor(),
+                            size: 20,
+                          ),
+                          const SizedBox(width: 10),
 
-              // Details row
-              Wrap(
-                spacing: 16,
-                runSpacing: 8,
-                children: [
-                  _buildDetailChip(
-                    Icons.calendar_today,
-                    game.formattedDate,
-                  ),
-                  _buildDetailChip(
-                    Icons.access_time,
-                    game.formattedTime,
-                  ),
-                  _buildDetailChip(
-                    Icons.people,
-                    '${game.currentPlayersCount}/${game.playersNeeded}',
-                    color: game.isFull ? Colors.red : Colors.green,
-                  ),
-                  if (!game.isFree)
-                    _buildDetailChip(
-                      Icons.currency_rupee,
-                      game.costDisplay,
-                      color: Colors.orange,
-                    ),
-                ],
-              ),
+                          // Game title
+                          Expanded(
+                            child: Text(
+                              game.autoTitle,
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 17,
+                                fontWeight: FontWeight.w600,
+                              ),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
 
-              // Join button
-              if (showJoinButton && !game.isFull && game.status == 'open') ...[
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: onJoinTap ?? onTap,
-                    icon: Icon(
-                      game.joinType == 'auto' ? Icons.group_add : Icons.send,
-                      size: 18,
-                    ),
-                    label: Text(
-                      game.joinType == 'auto' ? 'Join Game' : 'Request to Join',
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: FlutterFlowTheme.of(context).primary,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
+                          // Arrow icon
+                          Icon(
+                            Icons.arrow_forward_ios,
+                            size: 16,
+                            color: Colors.white.withValues(alpha: 0.5),
+                          ),
+                        ],
                       ),
-                    ),
+                      const SizedBox(height: 14),
+
+                  // Players count
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.people,
+                        size: 16,
+                        color: game.isFull ? Colors.red : Colors.green,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${game.currentPlayersCount} joined',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.8),
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      Text(
+                        ' • ${game.playersNeeded} needed',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.6),
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+
+                      // Organized by
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.person_outline,
+                            size: 16,
+                            color: Colors.white.withValues(alpha: 0.6),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Organized by ',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.6),
+                              fontSize: 14,
+                            ),
+                          ),
+                          Text(
+                            game.organizerName ?? 'Player',
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.8),
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Divider
+                      Container(
+                        height: 1,
+                        color: Colors.white.withValues(alpha: 0.1),
+                      ),
+                      const SizedBox(height: 14),
+
+                      // Details grid
+                      Row(
+                        children: [
+                          // Date & Time
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildInfoRow(Icons.calendar_today, game.formattedDate),
+                                const SizedBox(height: 8),
+                                _buildInfoRow(Icons.access_time, game.formattedTime),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          // Location & Level
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildInfoRow(Icons.location_on, game.locationDisplay),
+                                const SizedBox(height: 8),
+                                _buildInfoRow(
+                                  Icons.bar_chart,
+                                  game.skillLevel != null ? 'Level ${game.skillLevel}' : 'Open',
+                                  textColor: _getLevelColor(game.skillLevel),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ),
                 ),
               ],
-            ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildStatusBadge() {
-    Color color;
-    String text;
-    IconData icon;
-
-    switch (game.status) {
-      case 'full':
-        color = Colors.red;
-        text = 'Full';
-        icon = Icons.people;
-        break;
-      case 'in_progress':
-        color = Colors.orange;
-        text = 'In Progress';
-        icon = Icons.play_arrow;
-        break;
-      case 'completed':
-        color = Colors.grey;
-        text = 'Completed';
-        icon = Icons.check;
-        break;
-      case 'cancelled':
-        color = Colors.grey;
-        text = 'Cancelled';
-        icon = Icons.cancel;
-        break;
-      default: // open
-        color = Colors.green;
-        text = '${game.slotsRemaining} slots';
-        icon = Icons.group_add;
-    }
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color, width: 1),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 14, color: color),
-          const SizedBox(width: 4),
-          Text(
+  Widget _buildInfoRow(IconData icon, String text, {Color? textColor}) {
+    return Row(
+      children: [
+        Icon(
+          icon,
+          size: 14,
+          color: Colors.white.withValues(alpha: 0.5),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
             text,
             style: TextStyle(
-              color: color,
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
+              fontSize: 13,
+              color: textColor ?? Colors.white.withValues(alpha: 0.7),
+              fontWeight: FontWeight.w500,
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDetailChip(IconData icon, String text, {Color? color}) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 14, color: color ?? Colors.grey[600]),
-        const SizedBox(width: 4),
-        Text(
-          text,
-          style: TextStyle(
-            fontSize: 12,
-            color: color ?? Colors.grey[700],
-            fontWeight: FontWeight.w500,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],
@@ -230,5 +266,23 @@ class GameCard extends StatelessWidget {
       default:
         return Colors.blue;
     }
+  }
+
+  IconData _getSportIcon() {
+    switch (game.sportType) {
+      case 'badminton':
+        return Icons.sports_tennis; // Badminton racket
+      case 'pickleball':
+        return Icons.sports_baseball; // Pickleball paddle
+      default:
+        return Icons.sports;
+    }
+  }
+
+  Color _getLevelColor(int? level) {
+    if (level == null) return Colors.white.withValues(alpha: 0.7);
+    if (level <= 2) return Colors.green.shade300;
+    if (level == 3) return Colors.yellow.shade400;
+    return Colors.orange.shade400; // levels 4-5
   }
 }

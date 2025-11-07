@@ -24,15 +24,31 @@ class UserTokenInfo {
 Stream<UserTokenInfo> getFcmTokenStream(String userPath) =>
     Stream.value(!kIsWeb && (Platform.isIOS || Platform.isAndroid))
         .where((shouldGetToken) => shouldGetToken)
-        .asyncMap<String?>(
-            (_) => FirebaseMessaging.instance.requestPermission().then(
-                  (settings) => settings.authorizationStatus ==
-                          AuthorizationStatus.authorized
-                      ? FirebaseMessaging.instance.getToken()
-                      : null,
-                ))
+        .asyncMap<String?>((_) async {
+          try {
+            final settings = await FirebaseMessaging.instance.requestPermission();
+            if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+              // On iOS, get APNS token first
+              if (Platform.isIOS) {
+                try {
+                  await FirebaseMessaging.instance.getAPNSToken();
+                } catch (e) {
+                  print('APNS token not available (simulator or missing config): $e');
+                  return null;
+                }
+              }
+              return await FirebaseMessaging.instance.getToken();
+            }
+            return null;
+          } catch (e) {
+            print('Error getting FCM token: $e');
+            return null;
+          }
+        })
         .switchMap((fcmToken) => Stream.value(fcmToken)
-            .merge(FirebaseMessaging.instance.onTokenRefresh))
+            .merge(FirebaseMessaging.instance.onTokenRefresh.handleError((error) {
+              print('Error on token refresh: $error');
+            })))
         .where((fcmToken) => fcmToken != null && fcmToken.isNotEmpty)
         .map((token) => UserTokenInfo(userPath, token!));
 

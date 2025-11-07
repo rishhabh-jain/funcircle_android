@@ -1,17 +1,13 @@
 import '/backend/supabase/supabase.dart';
-import '/flutter_flow/flutter_flow_choice_chips.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
-import '/flutter_flow/flutter_flow_widgets.dart';
-import '/flutter_flow/form_field_controller.dart';
-import '/flutter_flow/custom_functions.dart' as functions;
+import '/auth/firebase_auth/auth_util.dart';
 import '/custom_code/actions/index.dart' as actions;
-import '/index.dart';
 import '/playnow/widgets/create_game_sheet.dart';
 import '/playnow/widgets/game_card.dart';
-import '/playnow/widgets/game_details_sheet.dart';
+import '/playnow/pages/game_details_page.dart';
 import '/playnow/services/game_service.dart';
-import '/playnow/models/game_model.dart';
+import '/playnow/services/new_user_offer_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
@@ -31,172 +27,315 @@ class PlaynewWidget extends StatefulWidget {
 
 class _PlaynewWidgetState extends State<PlaynewWidget> {
   late PlaynewModel _model;
-
   final scaffoldKey = GlobalKey<ScaffoldState>();
+  List<VenuesRow> _allVenues = [];
+  bool _isLoadingVenues = true;
 
   @override
   void initState() {
     super.initState();
     _model = createModel(context, () => PlaynewModel());
 
-    // On page load action.
+    // Initialize on page load
     SchedulerBinding.instance.addPostFrameCallback((_) async {
-      logFirebaseEvent('playnew_update_page_state');
-      _model.currentDate = dateTimeFormat(
-        "d",
-        getCurrentTimestamp,
-        locale: FFLocalizations.of(context).languageCode,
-      );
-      safeSetState(() {});
+      // Check and create new user offer (50% off first game)
+      if (currentUserUid.isNotEmpty) {
+        await NewUserOfferService.checkAndCreateNewUserOffer(currentUserUid);
+      }
 
-      // Get user's current location
-      _fetchUserLocation();
+      // Fetch user location
+      await _fetchUserLocation();
+
+      // Load venues
+      await _loadVenues();
+
+      // Auto-select AM/PM based on which has more games
+      await _selectBestTimeOfDay();
+
+      // Load games
+      await _loadGames();
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) => safeSetState(() {}));
   }
 
+  @override
+  void dispose() {
+    _model.dispose();
+    super.dispose();
+  }
+
+  /// Fetch user's current location
   Future<void> _fetchUserLocation() async {
+    // First check if we have a persisted location
+    if (FFAppState().locationDisplayText.isNotEmpty &&
+        FFAppState().userLocation != null) {
+      safeSetState(() {
+        _model.userLocation = FFAppState().userLocation;
+        _model.locationDisplayText = FFAppState().locationDisplayText;
+        _model.isLoadingLocation = false;
+      });
+      return;
+    }
+
     safeSetState(() {
       _model.isLoadingLocation = true;
     });
 
     try {
       final location = await actions.getCurrentLocation();
-      if (location != null) {
+      if (location != null && mounted) {
         safeSetState(() {
           _model.userLocation = location;
           _model.locationDisplayText = 'Current Location';
           _model.isLoadingLocation = false;
         });
 
-        // Store in global app state as well
+        // Store in global app state
         FFAppState().update(() {
           FFAppState().userLocation = location;
           FFAppState().userLatitude = location.latitude;
           FFAppState().userLongitude = location.longitude;
+          FFAppState().locationDisplayText = 'Current Location';
         });
       } else {
-        safeSetState(() {
-          _model.isLoadingLocation = false;
-          _model.locationDisplayText = 'Gurugram'; // Fallback
-        });
+        // Default to Gurugram coordinates
+        if (mounted) {
+          final gurugram = LatLng(28.4595, 77.0266);
+          safeSetState(() {
+            _model.userLocation = gurugram;
+            _model.isLoadingLocation = false;
+            _model.locationDisplayText = 'Gurugram';
+          });
+
+          // Store in global app state
+          FFAppState().update(() {
+            FFAppState().userLocation = gurugram;
+            FFAppState().userLatitude = gurugram.latitude;
+            FFAppState().userLongitude = gurugram.longitude;
+            FFAppState().locationDisplayText = 'Gurugram';
+          });
+        }
       }
     } catch (e) {
       print('Error fetching location: $e');
-      safeSetState(() {
-        _model.isLoadingLocation = false;
-        _model.locationDisplayText = 'Gurugram'; // Fallback
-      });
+      if (mounted) {
+        // Default to Gurugram coordinates
+        final gurugram = LatLng(28.4595, 77.0266);
+        safeSetState(() {
+          _model.userLocation = gurugram;
+          _model.isLoadingLocation = false;
+          _model.locationDisplayText = 'Gurugram';
+        });
+
+        // Store in global app state
+        FFAppState().update(() {
+          FFAppState().userLocation = gurugram;
+          FFAppState().userLatitude = gurugram.latitude;
+          FFAppState().userLongitude = gurugram.longitude;
+          FFAppState().locationDisplayText = 'Gurugram';
+        });
+      }
     }
   }
 
-  Future<void> _calculateVenueDistances(List<VenuesRow> venues) async {
-    if (_model.userLocation == null) {
-      print('⚠️ No user location available for distance calculation');
-      return;
-    }
-
-    // Skip if already calculated for this exact location
-    if (_model.lastCalculatedLocation != null &&
-        _model.lastCalculatedLocation!.latitude ==
-            _model.userLocation!.latitude &&
-        _model.lastCalculatedLocation!.longitude ==
-            _model.userLocation!.longitude &&
-        _model.venueDistances.isNotEmpty) {
-      print('✓ Distances already calculated for this location - SKIPPING');
-      return;
-    }
-
-    // Skip if already calculating
-    if (_model.isCalculatingDistances) {
-      print('⚠️ Distance calculation already in progress - SKIPPING');
-      return;
-    }
-
-    _model.calculationRequestId++;
-    final currentRequestId = _model.calculationRequestId;
-
-    print(
-        '🚀 Starting Distance Matrix API call #$currentRequestId (playnew screen)');
-
-    safeSetState(() {
-      _model.isCalculatingDistances = true;
-      _model.lastCalculatedLocation = _model.userLocation;
-    });
-
+  /// Load venues from database
+  Future<void> _loadVenues() async {
     try {
-      final result = await actions.calculateDistanceMatrix(
-        _model.userLocation!,
-        venues,
+      safeSetState(() => _isLoadingVenues = true);
+
+      // Fetch all venues
+      final venuesData = await VenuesTable().queryRows(
+        queryFn: (q) => q.inFilter('group_id', [90, 104, 105]),
       );
 
-      if (currentRequestId != _model.calculationRequestId) {
-        print('⚠️ Request superseded - DISCARDING results');
-        return;
+      if (mounted) {
+        _allVenues = venuesData;
+
+        // Calculate distances if location is available
+        if (_model.userLocation != null) {
+          await _calculateVenueDistances();
+        }
+
+        // Select nearest venue by default (only if matching venues exist)
+        if (_allVenues.isNotEmpty) {
+          final sortedVenues = _getSortedVenuesBySport();
+          if (sortedVenues.isNotEmpty) {
+            final nearestVenue = sortedVenues.first;
+            safeSetState(() {
+              _model.selectedVenueId = nearestVenue.id;
+              _model.selectedVenueName = nearestVenue.venueName;
+            });
+          } else {
+            // No venues match the selected sport
+            safeSetState(() {
+              _model.selectedVenueId = null;
+              _model.selectedVenueName = null;
+            });
+          }
+        }
+
+        safeSetState(() => _isLoadingVenues = false);
       }
-
-      safeSetState(() {
-        _model.venueDistances =
-            Map<int, double>.from(result['distances'] as Map);
-        _model.venueDurations = Map<int, int>.from(result['durations'] as Map);
-        _model.isCalculatingDistances = false;
-      });
-
-      print(
-          '✅ Distance calculation completed for ${_model.venueDistances.length} venues');
     } catch (e) {
-      print('❌ Error calculating distances: $e');
-      safeSetState(() {
-        _model.isCalculatingDistances = false;
+      print('Error loading venues: $e');
+      if (mounted) {
+        safeSetState(() => _isLoadingVenues = false);
+      }
+    }
+  }
+
+  /// Calculate distances to venues
+  Future<void> _calculateVenueDistances() async {
+    if (_model.userLocation == null) return;
+    if (_model.isCalculatingDistances) return;
+
+    try {
+      safeSetState(() => _model.isCalculatingDistances = true);
+
+      final result = await actions.calculateDistanceMatrix(
+        _model.userLocation!,
+        _allVenues,
+      );
+
+      if (mounted) {
+        safeSetState(() {
+          _model.venueDistances.clear();
+          _model.venueDurations.clear();
+
+          // Result structure: {'distances': {venueId: distance}, 'durations': {venueId: duration}}
+          final distances = result['distances'];
+          final durations = result['durations'];
+
+          if (distances != null) {
+            distances.forEach((venueId, distance) {
+              _model.venueDistances[venueId] = distance.toDouble();
+            });
+          }
+
+          if (durations != null) {
+            durations.forEach((venueId, duration) {
+              _model.venueDurations[venueId] = duration.toInt();
+            });
+          }
+
+          _model.lastCalculatedLocation = _model.userLocation;
+        });
+      }
+    } catch (e) {
+      print('Error calculating distances: $e');
+    } finally {
+      if (mounted) {
+        safeSetState(() => _model.isCalculatingDistances = false);
+      }
+    }
+  }
+
+  /// Get venues sorted by distance for selected sport
+  List<VenuesRow> _getSortedVenuesBySport() {
+    final sportType = _model.selectedSportType;
+
+    // Filter venues by sport type
+    var filtered = _allVenues.where((venue) {
+      if (venue.sportType == null) return false;
+      final venueSport = venue.sportType!.toLowerCase();
+      return venueSport == sportType || venueSport == 'both';
+    }).toList();
+
+    // Sort by distance if available
+    if (_model.venueDistances.isNotEmpty) {
+      filtered.sort((a, b) {
+        final distA = _model.venueDistances[a.id] ?? double.infinity;
+        final distB = _model.venueDistances[b.id] ?? double.infinity;
+        return distA.compareTo(distB);
       });
     }
+
+    return filtered;
   }
 
-  int? _getNearestVenueId(List<dynamic> venueOptions) {
-    if (_model.venueDistances.isEmpty || venueOptions.isEmpty) {
-      return null;
+  /// Auto-select AM or PM based on which has more games
+  Future<void> _selectBestTimeOfDay() async {
+    if (_model.selectedVenueId == null) {
+      print('Cannot select time of day: No venue selected');
+      return;
     }
 
-    int? nearestVenueId;
-    double shortestDistance = double.infinity;
+    try {
+      final dateStr = DateFormat('yyyy-MM-dd').format(_model.selectedDate);
+      print('Auto-selecting time for date: $dateStr, venue: ${_model.selectedVenueId}, sport: ${_model.selectedSportType}');
 
-    for (final venue in venueOptions) {
-      final venueId = getJsonField(venue, r'''$.venueid''');
-      final distance = _model.venueDistances[venueId];
+      // Get games for both AM and PM
+      final amGames = await GameService.getGamesForVenueAndDate(
+        sportType: _model.selectedSportType,
+        venueId: _model.selectedVenueId,
+        date: dateStr,
+        timeOfDay: 'am',
+      );
 
-      if (distance != null && distance < shortestDistance) {
-        shortestDistance = distance;
-        nearestVenueId = venueId;
+      final pmGames = await GameService.getGamesForVenueAndDate(
+        sportType: _model.selectedSportType,
+        venueId: _model.selectedVenueId,
+        date: dateStr,
+        timeOfDay: 'pm',
+      );
+
+      print('AM games: ${amGames.length}, PM games: ${pmGames.length}');
+
+      if (mounted) {
+        safeSetState(() {
+          // Select the time period with more games, default to PM if equal or both zero
+          if (amGames.isEmpty && pmGames.isEmpty) {
+            // No games at all, keep current selection or default to PM
+            print('No games found, keeping current selection: ${_model.currentAmOrPm}');
+          } else {
+            _model.currentAmOrPm = amGames.length > pmGames.length ? 'am' : 'pm';
+            print('Selected: ${_model.currentAmOrPm}');
+          }
+        });
+      }
+    } catch (e) {
+      print('Error selecting best time of day: $e');
+      // Keep default (pm) if error occurs
+    }
+  }
+
+  /// Load games from database
+  Future<void> _loadGames() async {
+    if (_model.selectedVenueId == null) return;
+
+    safeSetState(() => _model.isLoadingGames = true);
+
+    try {
+      final dateStr = DateFormat('yyyy-MM-dd').format(_model.selectedDate);
+
+      final games = await GameService.getGamesForVenueAndDate(
+        sportType: _model.selectedSportType,
+        venueId: _model.selectedVenueId,
+        date: dateStr,
+        timeOfDay: _model.currentAmOrPm,
+      );
+
+      if (mounted) {
+        safeSetState(() {
+          _model.games = games;
+          _model.isLoadingGames = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading games: $e');
+      if (mounted) {
+        safeSetState(() {
+          _model.games = [];
+          _model.isLoadingGames = false;
+        });
       }
     }
-
-    return nearestVenueId;
   }
 
-  String _formatDistance(double distanceKm) {
-    if (distanceKm < 1) {
-      return '${(distanceKm * 1000).toStringAsFixed(0)} m';
-    } else {
-      return '${distanceKm.toStringAsFixed(1)} km';
-    }
-  }
-
-  String _formatDuration(int minutes) {
-    if (minutes < 60) {
-      return '$minutes min';
-    } else {
-      final hours = minutes ~/ 60;
-      final mins = minutes % 60;
-      if (mins == 0) {
-        return '${hours}h';
-      }
-      return '${hours}h ${mins}m';
-    }
-  }
-
-  void _showLocationDialog() {
-    showDialog(
+  /// Show location selector dialog
+  Future<void> _showLocationDialog() async {
+    return showDialog(
       context: context,
       builder: (dialogContext) => _LocationSearchDialog(
         currentLocation: _model.locationDisplayText,
@@ -204,1805 +343,911 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
           safeSetState(() {
             _model.userLocation = latLng;
             _model.locationDisplayText = description;
+            // Clear previous distances to trigger recalculation
             _model.venueDistances.clear();
-            _model.venueDurations.clear();
             _model.lastCalculatedLocation = null;
           });
 
+          // Update app state
           FFAppState().update(() {
             FFAppState().userLocation = latLng;
             FFAppState().userLatitude = latLng.latitude;
             FFAppState().userLongitude = latLng.longitude;
+            FFAppState().locationDisplayText = description;
           });
+
+          // Recalculate distances
+          if (_allVenues.isNotEmpty) {
+            await _calculateVenueDistances();
+
+            // Select nearest venue after recalculating distances
+            final sortedVenues = _getSortedVenuesBySport();
+            if (sortedVenues.isNotEmpty) {
+              safeSetState(() {
+                _model.selectedVenueId = sortedVenues.first.id;
+                _model.selectedVenueName = sortedVenues.first.venueName;
+              });
+
+              // Reload games for new venue and auto-select best time
+              await _selectBestTimeOfDay();
+              await _loadGames();
+            }
+          }
         },
       ),
     );
   }
 
-  @override
-  void dispose() {
-    _model.dispose();
+  /// Show venue selector dialog
+  Future<void> _showVenueSelector() async {
+    final venues = _getSortedVenuesBySport();
 
-    super.dispose();
+    await showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.6,
+          decoration: BoxDecoration(
+            color: Colors.black,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+          ),
+          child: Column(
+            children: [
+              // Handle
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+
+              // Title
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Text(
+                  'Select Venue',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+
+              // Venues list
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: venues.length,
+                  itemBuilder: (context, index) {
+                    final venue = venues[index];
+                    final distance = _model.venueDistances[venue.id];
+                    final isSelected = venue.id == _model.selectedVenueId;
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: InkWell(
+                        onTap: () async {
+                          Navigator.pop(context);
+                          safeSetState(() {
+                            _model.selectedVenueId = venue.id;
+                            _model.selectedVenueName = venue.venueName;
+                          });
+                          // Auto-select best AM/PM for the new venue
+                          await _selectBestTimeOfDay();
+                          _loadGames();
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? FlutterFlowTheme.of(context).primary.withValues(alpha: 0.2)
+                                : Colors.white.withValues(alpha: 0.05),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isSelected
+                                  ? FlutterFlowTheme.of(context).primary
+                                  : Colors.white.withValues(alpha: 0.15),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.location_on,
+                                color: isSelected
+                                    ? FlutterFlowTheme.of(context).primary
+                                    : Colors.white.withValues(alpha: 0.7),
+                                size: 24,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      venue.venueName ?? 'Venue ${venue.id}',
+                                      style: TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 16,
+                                        fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        if (distance != null) ...[
+                                          Text(
+                                            '${distance.toStringAsFixed(1)} km',
+                                            style: TextStyle(
+                                              color: Colors.white.withValues(alpha: 0.6),
+                                              fontSize: 13,
+                                            ),
+                                          ),
+                                          if (_model.venueDurations[venue.id] != null) ...[
+                                            Text(
+                                              ' • ',
+                                              style: TextStyle(
+                                                color: Colors.white.withValues(alpha: 0.4),
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                            Icon(
+                                              Icons.access_time,
+                                              size: 12,
+                                              color: Colors.white.withValues(alpha: 0.6),
+                                            ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              '${_model.venueDurations[venue.id]} min',
+                                              style: TextStyle(
+                                                color: Colors.white.withValues(alpha: 0.6),
+                                                fontSize: 13,
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (isSelected)
+                                Icon(
+                                  Icons.check_circle,
+                                  color: FlutterFlowTheme.of(context).primary,
+                                  size: 20,
+                                ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<List<TicketsRow>>(
-      future: TicketsTable().queryRows(
-        queryFn: (q) => q.eqOrNull(
-          'ticketstatus',
-          'live',
+    if (_isLoadingVenues) {
+      return Scaffold(
+        backgroundColor: const Color(0xFF0A0A0A),
+        body: Center(
+          child: SpinKitRing(
+            color: FlutterFlowTheme.of(context).primary,
+            size: 50.0,
+          ),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: () => FocusScope.of(context).unfocus(),
+      child: Scaffold(
+        key: scaffoldKey,
+        backgroundColor: const Color(0xFF0A0A0A),
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                const Color(0xFF0A0A0A),
+                const Color(0xFF1A1A1A),
+                const Color(0xFF0A0A0A),
+              ],
+              stops: const [0.0, 0.5, 1.0],
+            ),
+          ),
+          child: SafeArea(
+            child: CustomScrollView(
+              slivers: [
+                // Header with location
+                SliverToBoxAdapter(
+                  child: _buildHeader(),
+                ),
+
+                // Sport selector
+                SliverToBoxAdapter(
+                  child: _buildSportSelector(),
+                ),
+
+                // Venue selector
+                SliverToBoxAdapter(
+                  child: _buildVenueSelector(),
+                ),
+
+                // Dates row
+                SliverToBoxAdapter(
+                  child: _buildDatesRow(),
+                ),
+
+                // Create Game + AM/PM row
+                SliverToBoxAdapter(
+                  child: _buildActionRow(),
+                ),
+
+                // Games list
+                _buildGamesList(),
+              ],
+            ),
+          ),
         ),
       ),
-      builder: (context, snapshot) {
-        // Customize what your widget looks like when it's loading.
-        if (!snapshot.hasData) {
-          return Scaffold(
-            backgroundColor: FlutterFlowTheme.of(context).secondary,
-            body: Center(
-              child: SizedBox(
-                width: 50.0,
-                height: 50.0,
-                child: SpinKitRing(
-                  color: FlutterFlowTheme.of(context).primary,
-                  size: 50.0,
+    );
+  }
+
+  /// Build header with location
+  Widget _buildHeader() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          // Location selector
+          Expanded(
+            child: InkWell(
+              onTap: _showLocationDialog,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        width: 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.3),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.location_on,
+                          color: Colors.white.withValues(alpha: 0.7),
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            _model.isLoadingLocation
+                                ? 'Getting location...'
+                                : (_model.locationDisplayText ?? 'Select Location'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.keyboard_arrow_down,
+                          color: Colors.white.withValues(alpha: 0.5),
+                          size: 16,
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
-          );
-        }
-        List<TicketsRow> playnewTicketsRowList = snapshot.data!;
+          ),
 
-        // Set default date to first available date if not already set
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted &&
-              (_model.currentDate == null ||
-                  _model.currentDate ==
-                      dateTimeFormat("d", getCurrentTimestamp,
-                          locale: FFLocalizations.of(context).languageCode))) {
-            final availableDates = functions.getAvailableDates(
-              playnewTicketsRowList.toList(),
-              _model.currentAmOrPm,
-              _model.currentsportid,
-              _model.currentVenueId != null
-                  ? _model.currentVenueId
-                  : functions.getMostPopularVenue(
-                      playnewTicketsRowList.toList(),
-                      _model.currentAmOrPm,
-                      _model.currentsportid),
-            );
+          const SizedBox(width: 8),
 
-            if (availableDates != null && availableDates.isNotEmpty) {
-              final firstDate = getJsonField(
-                availableDates.first,
-                r'''$.date''',
-              ).toString();
+          // Refresh location button
+          InkWell(
+            onTap: () async {
+              safeSetState(() {
+                _model.venueDistances.clear();
+                _model.venueDurations.clear();
+                _model.lastCalculatedLocation = null;
+              });
+              await _fetchUserLocation();
 
-              if (_model.currentDate != firstDate) {
-                safeSetState(() {
-                  _model.currentDate = firstDate;
-                });
+              // After fetching location, recalculate and update nearest venue
+              if (_allVenues.isNotEmpty && _model.userLocation != null) {
+                await _calculateVenueDistances();
+
+                // Select nearest venue after recalculating distances
+                final sortedVenues = _getSortedVenuesBySport();
+                if (sortedVenues.isNotEmpty) {
+                  safeSetState(() {
+                    _model.selectedVenueId = sortedVenues.first.id;
+                    _model.selectedVenueName = sortedVenues.first.venueName;
+                  });
+
+                  // Reload games for new venue and auto-select best time
+                  await _selectBestTimeOfDay();
+                  await _loadGames();
+                }
               }
-            }
+            },
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.08),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.3),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    Icons.my_location,
+                    color: Colors.white.withValues(alpha: 0.7),
+                    size: 18,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build sport selector toggle
+  Widget _buildSportSelector() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: Row(
+        children: [
+          Expanded(child: _buildSportOption('badminton', '🏸 Badminton')),
+          const SizedBox(width: 8),
+          Expanded(child: _buildSportOption('pickleball', '🎾 Pickleball')),
+          const SizedBox(width: 8),
+          Expanded(child: _buildSportOption('padel', '🎾 Padel')),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSportOption(String sportType, String label) {
+    final isSelected = _model.selectedSportType == sportType;
+
+    return InkWell(
+      onTap: () {
+        safeSetState(() {
+          _model.selectedSportType = sportType;
+
+          // Reset venue selection and reload
+          final sortedVenues = _getSortedVenuesBySport();
+          if (sortedVenues.isNotEmpty) {
+            _model.selectedVenueId = sortedVenues.first.id;
+            _model.selectedVenueName = sortedVenues.first.venueName;
+          } else {
+            // No venues available for this sport
+            _model.selectedVenueId = null;
+            _model.selectedVenueName = null;
           }
         });
+        _loadGames();
+      },
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? FlutterFlowTheme.of(context).primary.withValues(alpha: 0.2)
+                  : Colors.white.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isSelected
+                    ? FlutterFlowTheme.of(context).primary
+                    : Colors.white.withValues(alpha: 0.15),
+                width: 1,
+              ),
+            ),
+            child: Center(
+              child: Text(
+                label,
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
-        return GestureDetector(
-          onTap: () {
-            FocusScope.of(context).unfocus();
-            FocusManager.instance.primaryFocus?.unfocus();
-          },
-          child: Scaffold(
-            key: scaffoldKey,
-            backgroundColor: FlutterFlowTheme.of(context).secondary,
-            body: SafeArea(
-              top: true,
-              child: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.max,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      height: 50.0,
-                      decoration: BoxDecoration(),
-                      child: Padding(
-                        padding:
-                            EdgeInsetsDirectional.fromSTEB(8.0, 0.0, 8.0, 4.0),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.max,
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Padding(
-                                    padding: EdgeInsetsDirectional.fromSTEB(
-                                        12.0, 0.0, 12.0, 0.0),
-                                    child: InkWell(
-                                      splashColor: Colors.transparent,
-                                      focusColor: Colors.transparent,
-                                      hoverColor: Colors.transparent,
-                                      highlightColor: Colors.transparent,
-                                      onTap: () async {
-                                        logFirebaseEvent('Icon_navigate_back');
-                                        context.safePop();
-                                      },
-                                      child: Icon(
-                                        Icons.arrow_back,
-                                        color: FlutterFlowTheme.of(context)
-                                            .tertiary,
-                                        size: 24.0,
-                                      ),
-                                    ),
-                                  ),
-                                  Flexible(
-                                    child: InkWell(
-                                      onTap: () {
-                                        _showLocationDialog();
-                                      },
-                                      child: ClipRRect(
-                                        borderRadius:
-                                            BorderRadius.circular(12.0),
-                                        child: BackdropFilter(
-                                          filter: ImageFilter.blur(
-                                              sigmaX: 10, sigmaY: 10),
-                                          child: Container(
-                                            padding: EdgeInsets.symmetric(
-                                                horizontal: 10.0,
-                                                vertical: 6.0),
-                                            decoration: BoxDecoration(
-                                              gradient: LinearGradient(
-                                                colors: [
-                                                  Colors.black
-                                                      .withValues(alpha: 0.7),
-                                                  Colors.black
-                                                      .withValues(alpha: 0.85),
-                                                ],
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(12.0),
-                                              border: Border.all(
-                                                color: Colors.white
-                                                    .withValues(alpha: 0.3),
-                                                width: 1,
-                                              ),
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(
-                                                  FFIcons.kmapPin,
-                                                  color: FlutterFlowTheme.of(
-                                                          context)
-                                                      .primary,
-                                                  size: 16.0,
-                                                ),
-                                                SizedBox(width: 6.0),
-                                                Flexible(
-                                                  child: Text(
-                                                    _model.isLoadingLocation
-                                                        ? 'Getting location...'
-                                                        : (_model
-                                                                .locationDisplayText ??
-                                                            'Gurugram'),
-                                                    maxLines: 1,
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    style: FlutterFlowTheme.of(
-                                                            context)
-                                                        .bodyMedium
-                                                        .override(
-                                                          fontFamily:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .bodyMediumFamily,
-                                                          color: Colors.white,
-                                                          fontSize: 14.0,
-                                                          letterSpacing: 0.0,
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                          useGoogleFonts:
-                                                              !FlutterFlowTheme
-                                                                      .of(context)
-                                                                  .bodyMediumIsCustom,
-                                                        ),
-                                                  ),
-                                                ),
-                                                SizedBox(width: 4.0),
-                                                Icon(
-                                                  Icons.keyboard_arrow_down,
-                                                  color: Colors.white
-                                                      .withValues(alpha: 0.6),
-                                                  size: 18.0,
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            // Refresh location button
-                            InkWell(
-                              onTap: () {
-                                safeSetState(() {
-                                  _model.venueDistances.clear();
-                                  _model.venueDurations.clear();
-                                  _model.lastCalculatedLocation = null;
-                                });
-                                _fetchUserLocation();
-                              },
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(12.0),
-                                child: BackdropFilter(
-                                  filter:
-                                      ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                                  child: Container(
-                                    padding: EdgeInsets.all(8.0),
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: [
-                                          FlutterFlowTheme.of(context).primary,
-                                          FlutterFlowTheme.of(context)
-                                              .primary
-                                              .withValues(alpha: 0.8),
-                                        ],
-                                      ),
-                                      borderRadius: BorderRadius.circular(12.0),
-                                      border: Border.all(
-                                        color:
-                                            Colors.white.withValues(alpha: 0.3),
-                                        width: 1,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: FlutterFlowTheme.of(context)
-                                              .primary
-                                              .withValues(alpha: 0.3),
-                                          blurRadius: 8,
-                                          offset: const Offset(0, 2),
-                                        ),
-                                      ],
-                                    ),
-                                    child: Icon(
-                                      Icons.my_location,
-                                      color: Colors.white,
-                                      size: 16.0,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    Padding(
-                      padding:
-                          EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-                      child: Container(
-                        decoration: BoxDecoration(),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.max,
-                          children: [
-                            Expanded(
-                              child: FlutterFlowChoiceChips(
-                                options: [
-                                  ChipData(
-                                      FFLocalizations.of(context).getText(
-                                        'd9rhkeq9' /* Badminton */,
-                                      ),
-                                      FFIcons.kbadmintonPlayerSvgrepoCom),
-                                  ChipData(
-                                      FFLocalizations.of(context).getText(
-                                        'wkqc3l5e' /* Pickleball */,
-                                      ),
-                                      Icons.call_made),
-                                  ChipData(
-                                      FFLocalizations.of(context).getText(
-                                        'luzu9ah7' /* Padel */,
-                                      ),
-                                      Icons.sports_tennis)
-                                ],
-                                onChanged: (val) async {
-                                  safeSetState(() => _model.choiceChipsValue =
-                                      val?.firstOrNull);
-                                  logFirebaseEvent(
-                                      'ChoiceChips_update_page_state');
-                                  _model.currentsportid = valueOrDefault<int>(
-                                    () {
-                                      if (_model.choiceChipsValue ==
-                                          'Badminton') {
-                                        return 90;
-                                      } else if (_model.choiceChipsValue ==
-                                          'Pickleball') {
-                                        return 104;
-                                      } else if (_model.choiceChipsValue ==
-                                          'Padel') {
-                                        return 105;
-                                      } else {
-                                        return 90;
-                                      }
-                                    }(),
-                                    90,
-                                  );
-                                  _model.currentVenueId = null;
-                                  safeSetState(() {});
-                                },
-                                selectedChipStyle: ChipStyle(
-                                  backgroundColor:
-                                      FlutterFlowTheme.of(context).primary,
-                                  textStyle: FlutterFlowTheme.of(context)
-                                      .bodyMedium
-                                      .override(
-                                        fontFamily: FlutterFlowTheme.of(context)
-                                            .bodyMediumFamily,
-                                        color: Colors.white,
-                                        letterSpacing: 0.0,
-                                        fontWeight: FontWeight.w600,
-                                        useGoogleFonts:
-                                            !FlutterFlowTheme.of(context)
-                                                .bodyMediumIsCustom,
-                                      ),
-                                  iconColor: Colors.white,
-                                  iconSize: 16.0,
-                                  elevation: 2.0,
-                                  borderRadius: BorderRadius.circular(12.0),
-                                ),
-                                unselectedChipStyle: ChipStyle(
-                                  backgroundColor:
-                                      Colors.black.withValues(alpha: 0.6),
-                                  textStyle: FlutterFlowTheme.of(context)
-                                      .bodyMedium
-                                      .override(
-                                        fontFamily: FlutterFlowTheme.of(context)
-                                            .bodyMediumFamily,
-                                        color:
-                                            Colors.white.withValues(alpha: 0.7),
-                                        letterSpacing: 0.0,
-                                        useGoogleFonts:
-                                            !FlutterFlowTheme.of(context)
-                                                .bodyMediumIsCustom,
-                                      ),
-                                  iconColor:
-                                      Colors.white.withValues(alpha: 0.7),
-                                  iconSize: 16.0,
-                                  elevation: 0.0,
-                                  borderRadius: BorderRadius.circular(12.0),
-                                ),
-                                chipSpacing: 8.0,
-                                rowSpacing: 8.0,
-                                multiselect: false,
-                                initialized: _model.choiceChipsValue != null,
-                                alignment: WrapAlignment.start,
-                                controller:
-                                    _model.choiceChipsValueController ??=
-                                        FormFieldController<List<String>>(
-                                  [
-                                    FFLocalizations.of(context).getText(
-                                      'tj81zx5p' /* Badminton */,
-                                    )
-                                  ],
-                                ),
-                                wrapped: false,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    // Games Section
-                    Padding(
-                      padding:
-                          EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
-                      child: FutureBuilder<List<Game>>(
-                        future: GameService.getOpenGames(
-                          sportType: _model.choiceChipsValue?.toLowerCase() ==
-                                  'badminton'
-                              ? 'badminton'
-                              : _model.choiceChipsValue?.toLowerCase() ==
-                                      'pickleball'
-                                  ? 'pickleball'
-                                  : 'badminton',
-                          limit: 10,
-                        ),
-                        builder: (context, snapshot) {
-                          if (!snapshot.hasData) {
-                            return Center(
-                              child: SizedBox(
-                                width: 30.0,
-                                height: 30.0,
-                                child: CircularProgressIndicator(
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    FlutterFlowTheme.of(context).primary,
-                                  ),
-                                ),
-                              ),
-                            );
-                          }
+  /// Build venue selector
+  Widget _buildVenueSelector() {
+    final hasVenues = _getSortedVenuesBySport().isNotEmpty;
 
-                          final games = snapshot.data!;
+    // Get sport-specific icon
+    IconData getSportIcon() {
+      switch (_model.selectedSportType) {
+        case 'badminton':
+          return Icons.sports_tennis; // Badminton racket
+        case 'pickleball':
+          return Icons.sports_baseball; // Pickleball paddle
+        case 'padel':
+          return Icons.sports_tennis; // Padel racket
+        default:
+          return Icons.location_city;
+      }
+    }
 
-                          if (games.isEmpty) {
-                            return SizedBox.shrink();
-                          }
-
-                          return SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Row(
-                              children: games.map((game) {
-                                return Container(
-                                  width:
-                                      MediaQuery.of(context).size.width * 0.85,
-                                  margin: EdgeInsets.only(right: 12.0),
-                                  child: GameCard(
-                                    game: game,
-                                    onTap: () async {
-                                      await showModalBottomSheet(
-                                        context: context,
-                                        isScrollControlled: true,
-                                        backgroundColor: Colors.transparent,
-                                        builder: (context) => GameDetailsSheet(
-                                          game: game,
-                                          onGameUpdated: () {
-                                            safeSetState(() {});
-                                          },
-                                        ),
-                                      );
-                                    },
-                                    showJoinButton: true,
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    // Venues for booking continue below
-                    FutureBuilder<List<VenuesRow>>(
-                      future: VenuesTable().queryRows(
-                        queryFn: (q) => q.inFilter(
-                          'group_id',
-                          [90, 104, 105], // Badminton, Pickleball, Padel
-                        ),
-                      ),
-                      builder: (context, allVenuesSnapshot) {
-                        if (!allVenuesSnapshot.hasData) {
-                          return Padding(
-                            padding: EdgeInsets.all(12.0),
-                            child: Center(
-                              child: SizedBox(
-                                width: 50.0,
-                                height: 50.0,
-                                child: SpinKitRing(
-                                  color: FlutterFlowTheme.of(context).primary,
-                                  size: 50.0,
-                                ),
-                              ),
-                            ),
-                          );
-                        }
-
-                        final allVenues = allVenuesSnapshot.data!;
-
-                        // Calculate distances if not already done
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (mounted &&
-                              _model.userLocation != null &&
-                              !_model.isCalculatingDistances) {
-                            if (_model.venueDistances.isEmpty ||
-                                _model.lastCalculatedLocation?.latitude !=
-                                    _model.userLocation?.latitude) {
-                              _calculateVenueDistances(allVenues);
-                            }
-                          }
-                        });
-
-                        // Determine which venue to show
-                        final venueOptions = functions
-                                .getAllVenueOptions(
-                                    playnewTicketsRowList.toList(),
-                                    _model.currentsportid)
-                                ?.toList() ??
-                            [];
-
-                        int? displayVenueId;
-                        if (_model.currentVenueId != null) {
-                          displayVenueId = _model.currentVenueId;
-                        } else if (_model.venueDistances.isNotEmpty) {
-                          // Use nearest venue
-                          displayVenueId = _getNearestVenueId(venueOptions);
-                        }
-
-                        // Fallback to most popular if no distances yet
-                        displayVenueId ??= functions.getMostPopularVenue(
-                          playnewTicketsRowList.toList(),
-                          _model.currentAmOrPm,
-                          _model.currentsportid,
-                        );
-
-                        return Padding(
-                          padding: EdgeInsets.symmetric(
-                              horizontal: 12.0, vertical: 0),
-                          child: FutureBuilder<List<VenuesRow>>(
-                            future: VenuesTable().querySingleRow(
-                              queryFn: (q) => q.eqOrNull('id', displayVenueId),
-                            ),
-                            builder: (context, snapshot) {
-                              if (!snapshot.hasData) {
-                                return Center(
-                                  child: SizedBox(
-                                    width: 50.0,
-                                    height: 50.0,
-                                    child: SpinKitRing(
-                                      color:
-                                          FlutterFlowTheme.of(context).primary,
-                                      size: 50.0,
-                                    ),
-                                  ),
-                                );
-                              }
-
-                              final containerVenuesRow =
-                                  snapshot.data!.isNotEmpty
-                                      ? snapshot.data!.first
-                                      : null;
-
-                              final venueId = containerVenuesRow?.id;
-                              final hasDistance = venueId != null &&
-                                  _model.venueDistances.containsKey(venueId);
-
-                              return ClipRRect(
-                                borderRadius: BorderRadius.circular(16.0),
-                                child: BackdropFilter(
-                                  filter:
-                                      ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                                  child: Container(
-                                    width: double.infinity,
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: [
-                                          Colors.black.withValues(alpha: 0.7),
-                                          Colors.black.withValues(alpha: 0.85),
-                                        ],
-                                      ),
-                                      borderRadius: BorderRadius.circular(16.0),
-                                      border: Border.all(
-                                        color:
-                                            Colors.white.withValues(alpha: 0.3),
-                                        width: 1,
-                                      ),
-                                    ),
-                                    child: Padding(
-                                      padding: EdgeInsets.all(12.0),
-                                      child: Column(
-                                        mainAxisSize: MainAxisSize.max,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Row(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Expanded(
-                                                child: Text(
-                                                  valueOrDefault<String>(
-                                                    containerVenuesRow
-                                                        ?.venueName,
-                                                    'Venue name',
-                                                  ),
-                                                  style: FlutterFlowTheme.of(
-                                                          context)
-                                                      .bodyMedium
-                                                      .override(
-                                                        fontFamily:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .bodyMediumFamily,
-                                                        color:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .tertiary,
-                                                        fontSize: 16.0,
-                                                        letterSpacing: 0.0,
-                                                        fontWeight:
-                                                            FontWeight.w600,
-                                                        useGoogleFonts:
-                                                            !FlutterFlowTheme
-                                                                    .of(context)
-                                                                .bodyMediumIsCustom,
-                                                      ),
-                                                ),
-                                              ),
-                                              if (hasDistance)
-                                                Container(
-                                                  padding: EdgeInsets.symmetric(
-                                                      horizontal: 8.0,
-                                                      vertical: 4.0),
-                                                  decoration: BoxDecoration(
-                                                    color: FlutterFlowTheme.of(
-                                                            context)
-                                                        .primary,
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            8.0),
-                                                  ),
-                                                  child: Row(
-                                                    mainAxisSize:
-                                                        MainAxisSize.min,
-                                                    children: [
-                                                      Icon(
-                                                        Icons.near_me,
-                                                        color: Colors.white,
-                                                        size: 12.0,
-                                                      ),
-                                                      SizedBox(width: 4.0),
-                                                      Text(
-                                                        _formatDistance(_model
-                                                                .venueDistances[
-                                                            venueId]!),
-                                                        style: FlutterFlowTheme
-                                                                .of(context)
-                                                            .bodySmall
-                                                            .override(
-                                                              fontFamily:
-                                                                  FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .bodySmallFamily,
-                                                              color:
-                                                                  Colors.white,
-                                                              fontSize: 11.0,
-                                                              fontWeight:
-                                                                  FontWeight
-                                                                      .bold,
-                                                              letterSpacing:
-                                                                  0.0,
-                                                              useGoogleFonts:
-                                                                  !FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .bodySmallIsCustom,
-                                                            ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                            ],
-                                          ),
-                                          SizedBox(height: 8.0),
-                                          Row(
-                                            mainAxisSize: MainAxisSize.max,
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.spaceBetween,
-                                            children: [
-                                              Row(
-                                                children: [
-                                                  Text(
-                                                    _model.venueDistances
-                                                            .isNotEmpty
-                                                        ? 'Nearest Venue'
-                                                        : 'Popular Venue',
-                                                    style: FlutterFlowTheme.of(
-                                                            context)
-                                                        .bodyMedium
-                                                        .override(
-                                                          fontFamily:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .bodyMediumFamily,
-                                                          color:
-                                                              Color(0xFF0C85FF),
-                                                          fontSize: 13.0,
-                                                          letterSpacing: 0.0,
-                                                          useGoogleFonts:
-                                                              !FlutterFlowTheme
-                                                                      .of(context)
-                                                                  .bodyMediumIsCustom,
-                                                        ),
-                                                  ),
-                                                  if (hasDistance &&
-                                                      _model.venueDurations
-                                                          .containsKey(venueId))
-                                                    Padding(
-                                                      padding:
-                                                          EdgeInsetsDirectional
-                                                              .fromSTEB(
-                                                                  8.0,
-                                                                  0.0,
-                                                                  0.0,
-                                                                  0.0),
-                                                      child: Row(
-                                                        children: [
-                                                          Icon(
-                                                            Icons.access_time,
-                                                            color: Colors
-                                                                .grey[400],
-                                                            size: 14.0,
-                                                          ),
-                                                          SizedBox(width: 4.0),
-                                                          Text(
-                                                            _formatDuration(
-                                                                _model.venueDurations[
-                                                                    venueId]!),
-                                                            style: FlutterFlowTheme
-                                                                    .of(context)
-                                                                .bodySmall
-                                                                .override(
-                                                                  fontFamily: FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .bodySmallFamily,
-                                                                  color: Colors
-                                                                          .grey[
-                                                                      400],
-                                                                  fontSize:
-                                                                      12.0,
-                                                                  letterSpacing:
-                                                                      0.0,
-                                                                  useGoogleFonts:
-                                                                      !FlutterFlowTheme.of(
-                                                                              context)
-                                                                          .bodySmallIsCustom,
-                                                                ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                    ),
-                                                ],
-                                              ),
-                                              FFButtonWidget(
-                                                onPressed: () async {
-                                                  logFirebaseEvent(
-                                                      'Button_update_page_state');
-                                                  _model.showAllVenues =
-                                                      !_model.showAllVenues;
-                                                  safeSetState(() {});
-                                                },
-                                                text: _model.showAllVenues
-                                                    ? 'Hide Venues'
-                                                    : 'All Venues',
-                                                icon: Icon(
-                                                  _model.showAllVenues
-                                                      ? Icons.expand_less
-                                                      : Icons.expand_more,
-                                                  size: 16.0,
-                                                ),
-                                                options: FFButtonOptions(
-                                                  height: 32.0,
-                                                  padding: EdgeInsetsDirectional
-                                                      .fromSTEB(
-                                                          12.0, 0.0, 12.0, 0.0),
-                                                  iconPadding:
-                                                      EdgeInsetsDirectional
-                                                          .fromSTEB(0.0, 0.0,
-                                                              0.0, 0.0),
-                                                  color: _model.showAllVenues
-                                                      ? FlutterFlowTheme.of(
-                                                              context)
-                                                          .primary
-                                                          .withValues(
-                                                              alpha: 0.2)
-                                                      : Color(0xFF1C1C1E),
-                                                  textStyle:
-                                                      FlutterFlowTheme.of(
-                                                              context)
-                                                          .titleSmall
-                                                          .override(
-                                                            fontFamily:
-                                                                FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .titleSmallFamily,
-                                                            color: _model
-                                                                    .showAllVenues
-                                                                ? FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .primary
-                                                                : Colors.white,
-                                                            fontSize: 13.0,
-                                                            fontWeight:
-                                                                FontWeight.w500,
-                                                            letterSpacing: 0.0,
-                                                            useGoogleFonts:
-                                                                !FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .titleSmallIsCustom,
-                                                          ),
-                                                  elevation: 0.0,
-                                                  borderSide: BorderSide(
-                                                    color: _model.showAllVenues
-                                                        ? FlutterFlowTheme.of(
-                                                                context)
-                                                            .primary
-                                                        : Color(0xFF3A3A3C),
-                                                    width: 1.5,
-                                                  ),
-                                                  borderRadius:
-                                                      BorderRadius.circular(
-                                                          16.0),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      child: InkWell(
+        onTap: hasVenues ? _showVenueSelector : null,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    getSportIcon(),
+                    color: Colors.white.withValues(alpha: hasVenues ? 0.7 : 0.4),
+                    size: 18,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          hasVenues
+                              ? (_model.selectedVenueName ?? 'Select Venue')
+                              : 'No venues available for this sport',
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: hasVenues ? 1.0 : 0.5),
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
                           ),
-                        );
+                        ),
+                        if (hasVenues && _getVenueDistanceText() != null)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              _getVenueDistanceText()!,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.6),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w400,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  if (hasVenues)
+                    Icon(
+                      Icons.keyboard_arrow_down,
+                      color: Colors.white.withValues(alpha: 0.5),
+                      size: 16,
+                    ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Build dates row
+  Widget _buildDatesRow() {
+    final today = DateTime.now();
+    final dates = List.generate(14, (index) => today.add(Duration(days: index)));
+
+    return Container(
+      height: 80,
+      margin: const EdgeInsets.symmetric(vertical: 12),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: dates.length,
+        itemBuilder: (context, index) {
+          final date = dates[index];
+          final isSelected = DateFormat('yyyy-MM-dd').format(date) ==
+              DateFormat('yyyy-MM-dd').format(_model.selectedDate);
+
+          return Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: _buildDateOption(date, isSelected),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildDateOption(DateTime date, bool isSelected) {
+    final dayName = DateFormat('EEE').format(date);
+    final dayNumber = DateFormat('d').format(date);
+
+    return InkWell(
+      onTap: () async {
+        safeSetState(() {
+          _model.selectedDate = date;
+        });
+        // Auto-select best AM/PM for the new date
+        await _selectBestTimeOfDay();
+        _loadGames();
+      },
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            width: 55,
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? Colors.white.withValues(alpha: 0.15)
+                  : Colors.white.withValues(alpha: 0.05),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: isSelected
+                    ? Colors.white.withValues(alpha: 0.5)
+                    : Colors.white.withValues(alpha: 0.15),
+                width: 1,
+              ),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  dayName,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: isSelected ? 0.9 : 0.7),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  dayNumber,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Build action row with Create Game button and AM/PM toggle
+  Widget _buildActionRow() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Row(
+        children: [
+          // Create Game button
+          Expanded(
+            flex: 2,
+            child: InkWell(
+              onTap: () async {
+                await showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (context) => Padding(
+                    padding: EdgeInsets.only(
+                      top: MediaQuery.of(context).size.height * 0.15,
+                    ),
+                    child: CreateGameSheet(
+                      initialSportType: _model.selectedSportType,
+                      initialVenueId: _model.selectedVenueId,
+                      onGameCreated: () {
+                        _loadGames();
                       },
                     ),
-                    if (_model.showAllVenues)
-                      Container(
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color: Color(0xFF0A0A0A),
-                        ),
-                        child: Builder(
-                          builder: (context) {
-                            var allVenues = functions
-                                    .getAllVenueOptions(
-                                        playnewTicketsRowList.toList(),
-                                        _model.currentsportid)
-                                    ?.toList() ??
-                                [];
-
-                            // Sort venues by distance (nearest first)
-                            if (_model.venueDistances.isNotEmpty) {
-                              allVenues.sort((a, b) {
-                                final venueIdA =
-                                    getJsonField(a, r'''$.venueid''');
-                                final venueIdB =
-                                    getJsonField(b, r'''$.venueid''');
-                                final distanceA =
-                                    _model.venueDistances[venueIdA] ??
-                                        double.maxFinite;
-                                final distanceB =
-                                    _model.venueDistances[venueIdB] ??
-                                        double.maxFinite;
-                                return distanceA.compareTo(distanceB);
-                              });
-                            }
-
-                            return Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                // Header
-                                Padding(
-                                  padding: EdgeInsets.all(12.0),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      Text(
-                                        'All Venues',
-                                        style: FlutterFlowTheme.of(context)
-                                            .titleMedium
-                                            .override(
-                                              fontFamily:
-                                                  FlutterFlowTheme.of(context)
-                                                      .titleMediumFamily,
-                                              color: Colors.white,
-                                              fontSize: 16.0,
-                                              fontWeight: FontWeight.w600,
-                                              letterSpacing: 0.0,
-                                              useGoogleFonts:
-                                                  !FlutterFlowTheme.of(context)
-                                                      .titleMediumIsCustom,
-                                            ),
-                                      ),
-                                      if (_model.venueDistances.isNotEmpty)
-                                        Container(
-                                          padding: EdgeInsets.symmetric(
-                                            horizontal: 8.0,
-                                            vertical: 4.0,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: FlutterFlowTheme.of(context)
-                                                .primary
-                                                .withValues(alpha: 0.1),
-                                            borderRadius:
-                                                BorderRadius.circular(8.0),
-                                          ),
-                                          child: Row(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Icon(
-                                                Icons.sort,
-                                                color:
-                                                    FlutterFlowTheme.of(context)
-                                                        .primary,
-                                                size: 14.0,
-                                              ),
-                                              SizedBox(width: 4.0),
-                                              Text(
-                                                'Sorted by distance',
-                                                style: FlutterFlowTheme.of(
-                                                        context)
-                                                    .bodySmall
-                                                    .override(
-                                                      fontFamily:
-                                                          FlutterFlowTheme.of(
-                                                                  context)
-                                                              .bodySmallFamily,
-                                                      color:
-                                                          FlutterFlowTheme.of(
-                                                                  context)
-                                                              .primary,
-                                                      fontSize: 11.0,
-                                                      letterSpacing: 0.0,
-                                                      useGoogleFonts:
-                                                          !FlutterFlowTheme.of(
-                                                                  context)
-                                                              .bodySmallIsCustom,
-                                                    ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                                // Venues list
-                                SingleChildScrollView(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.max,
-                                    children: List.generate(allVenues.length,
-                                        (allVenuesIndex) {
-                                      final allVenuesItem =
-                                          allVenues[allVenuesIndex];
-                                      return Padding(
-                                        padding: EdgeInsets.all(12.0),
-                                        child: FutureBuilder<List<VenuesRow>>(
-                                          future: VenuesTable().querySingleRow(
-                                            queryFn: (q) => q.eqOrNull(
-                                              'id',
-                                              getJsonField(
-                                                allVenuesItem,
-                                                r'''$.venueid''',
-                                              ),
-                                            ),
-                                          ),
-                                          builder: (context, snapshot) {
-                                            // Customize what your widget looks like when it's loading.
-                                            if (!snapshot.hasData) {
-                                              return Center(
-                                                child: SizedBox(
-                                                  width: 50.0,
-                                                  height: 50.0,
-                                                  child: SpinKitRing(
-                                                    color: FlutterFlowTheme.of(
-                                                            context)
-                                                        .primary,
-                                                    size: 50.0,
-                                                  ),
-                                                ),
-                                              );
-                                            }
-                                            List<VenuesRow>
-                                                containerVenuesRowList =
-                                                snapshot.data!;
-
-                                            final containerVenuesRow =
-                                                containerVenuesRowList
-                                                        .isNotEmpty
-                                                    ? containerVenuesRowList
-                                                        .first
-                                                    : null;
-
-                                            final venueId =
-                                                containerVenuesRow?.id;
-                                            final hasDistance =
-                                                venueId != null &&
-                                                    _model.venueDistances
-                                                        .containsKey(venueId);
-
-                                            return InkWell(
-                                              splashColor: Colors.transparent,
-                                              focusColor: Colors.transparent,
-                                              hoverColor: Colors.transparent,
-                                              highlightColor:
-                                                  Colors.transparent,
-                                              onTap: () async {
-                                                logFirebaseEvent(
-                                                    'Container_update_page_state');
-                                                _model.currentVenueId =
-                                                    getJsonField(
-                                                  allVenuesItem,
-                                                  r'''$.venueid''',
-                                                );
-                                                safeSetState(() {});
-                                                logFirebaseEvent(
-                                                    'Container_update_page_state');
-                                                _model.showAllVenues = false;
-                                                safeSetState(() {});
-                                              },
-                                              child: Container(
-                                                width: double.infinity,
-                                                decoration: BoxDecoration(
-                                                  borderRadius:
-                                                      BorderRadius.circular(
-                                                          16.0),
-                                                  border: Border.all(
-                                                    color: Color(0xFF5B5B5B),
-                                                  ),
-                                                ),
-                                                child: Padding(
-                                                  padding: EdgeInsets.all(12.0),
-                                                  child: Row(
-                                                    mainAxisAlignment:
-                                                        MainAxisAlignment
-                                                            .spaceBetween,
-                                                    children: [
-                                                      Expanded(
-                                                        child: Text(
-                                                          valueOrDefault<
-                                                              String>(
-                                                            containerVenuesRow
-                                                                ?.venueName,
-                                                            'Venue Name',
-                                                          ),
-                                                          style: FlutterFlowTheme
-                                                                  .of(context)
-                                                              .bodyMedium
-                                                              .override(
-                                                                fontFamily: FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .bodyMediumFamily,
-                                                                color: FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .tertiary,
-                                                                fontSize: 15.0,
-                                                                letterSpacing:
-                                                                    0.0,
-                                                                useGoogleFonts:
-                                                                    !FlutterFlowTheme.of(
-                                                                            context)
-                                                                        .bodyMediumIsCustom,
-                                                              ),
-                                                        ),
-                                                      ),
-                                                      if (hasDistance)
-                                                        Column(
-                                                          crossAxisAlignment:
-                                                              CrossAxisAlignment
-                                                                  .end,
-                                                          children: [
-                                                            Container(
-                                                              padding: EdgeInsets
-                                                                  .symmetric(
-                                                                      horizontal:
-                                                                          6.0,
-                                                                      vertical:
-                                                                          3.0),
-                                                              decoration:
-                                                                  BoxDecoration(
-                                                                color: FlutterFlowTheme.of(
-                                                                        context)
-                                                                    .primary,
-                                                                borderRadius:
-                                                                    BorderRadius
-                                                                        .circular(
-                                                                            6.0),
-                                                              ),
-                                                              child: Row(
-                                                                mainAxisSize:
-                                                                    MainAxisSize
-                                                                        .min,
-                                                                children: [
-                                                                  Icon(
-                                                                    Icons
-                                                                        .near_me,
-                                                                    color: Colors
-                                                                        .white,
-                                                                    size: 10.0,
-                                                                  ),
-                                                                  SizedBox(
-                                                                      width:
-                                                                          3.0),
-                                                                  Text(
-                                                                    _formatDistance(
-                                                                        _model.venueDistances[
-                                                                            venueId]!),
-                                                                    style: FlutterFlowTheme.of(
-                                                                            context)
-                                                                        .bodySmall
-                                                                        .override(
-                                                                          fontFamily:
-                                                                              FlutterFlowTheme.of(context).bodySmallFamily,
-                                                                          color:
-                                                                              Colors.white,
-                                                                          fontSize:
-                                                                              10.0,
-                                                                          fontWeight:
-                                                                              FontWeight.bold,
-                                                                          letterSpacing:
-                                                                              0.0,
-                                                                          useGoogleFonts:
-                                                                              !FlutterFlowTheme.of(context).bodySmallIsCustom,
-                                                                        ),
-                                                                  ),
-                                                                ],
-                                                              ),
-                                                            ),
-                                                            if (_model
-                                                                .venueDurations
-                                                                .containsKey(
-                                                                    venueId))
-                                                              Padding(
-                                                                padding:
-                                                                    EdgeInsetsDirectional
-                                                                        .fromSTEB(
-                                                                            0.0,
-                                                                            4.0,
-                                                                            0.0,
-                                                                            0.0),
-                                                                child: Row(
-                                                                  mainAxisSize:
-                                                                      MainAxisSize
-                                                                          .min,
-                                                                  children: [
-                                                                    Icon(
-                                                                      Icons
-                                                                          .access_time,
-                                                                      color: Colors
-                                                                              .grey[
-                                                                          400],
-                                                                      size:
-                                                                          11.0,
-                                                                    ),
-                                                                    SizedBox(
-                                                                        width:
-                                                                            3.0),
-                                                                    Text(
-                                                                      _formatDuration(
-                                                                          _model
-                                                                              .venueDurations[venueId]!),
-                                                                      style: FlutterFlowTheme.of(
-                                                                              context)
-                                                                          .bodySmall
-                                                                          .override(
-                                                                            fontFamily:
-                                                                                FlutterFlowTheme.of(context).bodySmallFamily,
-                                                                            color:
-                                                                                Colors.grey[400],
-                                                                            fontSize:
-                                                                                10.0,
-                                                                            letterSpacing:
-                                                                                0.0,
-                                                                            useGoogleFonts:
-                                                                                !FlutterFlowTheme.of(context).bodySmallIsCustom,
-                                                                          ),
-                                                                    ),
-                                                                  ],
-                                                                ),
-                                                              ),
-                                                          ],
-                                                        ),
-                                                    ],
-                                                  ),
-                                                ),
-                                              ),
-                                            );
-                                          },
-                                        ),
-                                      );
-                                    }),
-                                  ),
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
-                    Builder(
-                      builder: (context) {
-                        final availableDates = functions
-                                .getAvailableDates(
-                                    playnewTicketsRowList.toList(),
-                                    _model.currentAmOrPm,
-                                    _model.currentsportid,
-                                    _model.currentVenueId != null
-                                        ? _model.currentVenueId
-                                        : functions.getMostPopularVenue(
-                                            playnewTicketsRowList.toList(),
-                                            _model.currentAmOrPm,
-                                            _model.currentsportid))
-                                ?.toList() ??
-                            [];
-
-                        return SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            mainAxisSize: MainAxisSize.max,
-                            mainAxisAlignment: MainAxisAlignment.start,
-                            children: List.generate(availableDates.length,
-                                (availableDatesIndex) {
-                              final availableDatesItem =
-                                  availableDates[availableDatesIndex];
-                              return Padding(
-                                padding: EdgeInsetsDirectional.fromSTEB(
-                                    0.0, 12.0, 0.0, 12.0),
-                                child: InkWell(
-                                  splashColor: Colors.transparent,
-                                  focusColor: Colors.transparent,
-                                  hoverColor: Colors.transparent,
-                                  highlightColor: Colors.transparent,
-                                  onTap: () async {
-                                    logFirebaseEvent(
-                                        'Container_update_page_state');
-                                    _model.currentDate = getJsonField(
-                                      availableDatesItem,
-                                      r'''$.date''',
-                                    ).toString();
-                                    safeSetState(() {});
-                                  },
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      borderRadius: BorderRadius.circular(12.0),
-                                    ),
-                                    child: SingleChildScrollView(
-                                      scrollDirection: Axis.horizontal,
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.max,
-                                        children: [
-                                          Container(
-                                            decoration: BoxDecoration(
-                                              borderRadius:
-                                                  BorderRadius.circular(16.0),
-                                              border: Border.all(
-                                                color: _model.currentDate ==
-                                                        getJsonField(
-                                                          availableDatesItem,
-                                                          r'''$.date''',
-                                                        ).toString()
-                                                    ? FlutterFlowTheme.of(
-                                                            context)
-                                                        .tertiary
-                                                    : Color(0xFF3A3A3A),
-                                                width: 1.0,
-                                              ),
-                                            ),
-                                            child: Padding(
-                                              padding: EdgeInsets.all(12.0),
-                                              child: Column(
-                                                mainAxisSize: MainAxisSize.max,
-                                                children: [
-                                                  Text(
-                                                    getJsonField(
-                                                      availableDatesItem,
-                                                      r'''$.date''',
-                                                    ).toString(),
-                                                    style: FlutterFlowTheme.of(
-                                                            context)
-                                                        .bodyMedium
-                                                        .override(
-                                                          fontFamily:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .bodyMediumFamily,
-                                                          color: FlutterFlowTheme
-                                                                  .of(context)
-                                                              .tertiary,
-                                                          fontSize: 18.0,
-                                                          letterSpacing: 0.0,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                          useGoogleFonts:
-                                                              !FlutterFlowTheme
-                                                                      .of(context)
-                                                                  .bodyMediumIsCustom,
-                                                        ),
-                                                  ),
-                                                  Text(
-                                                    getJsonField(
-                                                      availableDatesItem,
-                                                      r'''$.day''',
-                                                    ).toString(),
-                                                    style: FlutterFlowTheme.of(
-                                                            context)
-                                                        .bodyMedium
-                                                        .override(
-                                                          fontFamily:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .bodyMediumFamily,
-                                                          color: FlutterFlowTheme
-                                                                  .of(context)
-                                                              .tertiary,
-                                                          fontSize: 14.0,
-                                                          letterSpacing: 0.0,
-                                                          fontWeight:
-                                                              FontWeight.normal,
-                                                          useGoogleFonts:
-                                                              !FlutterFlowTheme
-                                                                      .of(context)
-                                                                  .bodyMediumIsCustom,
-                                                        ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                          ),
-                                        ]
-                                            .divide(SizedBox(width: 12.0))
-                                            .addToStart(SizedBox(width: 12.0))
-                                            .addToEnd(SizedBox(width: 12.0)),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            }),
-                          ),
-                        );
-                      },
-                    ),
-                    Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(),
-                      child: Padding(
-                        padding: EdgeInsets.all(12.0),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.max,
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            InkWell(
-                              onTap: () async {
-                                logFirebaseEvent('CREATE_GAME_BTN_show_bottom_sheet');
-                                await showModalBottomSheet(
-                                  context: context,
-                                  isScrollControlled: true,
-                                  backgroundColor: Colors.transparent,
-                                  builder: (context) => CreateGameSheet(
-                                    initialSportType: _model.choiceChipsValue
-                                                ?.toLowerCase() ==
-                                            'badminton'
-                                        ? 'badminton'
-                                        : _model.choiceChipsValue
-                                                    ?.toLowerCase() ==
-                                                'pickleball'
-                                            ? 'pickleball'
-                                            : 'badminton',
-                                    onGameCreated: () {
-                                      safeSetState(() {});
-                                    },
-                                  ),
-                                );
-                              },
-                              child: ClipRRect(
-                                borderRadius: BorderRadius.circular(12.0),
-                                child: BackdropFilter(
-                                  filter:
-                                      ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                                  child: Container(
-                                    padding: EdgeInsets.symmetric(
-                                      vertical: 10.0,
-                                      horizontal: 16.0,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: [
-                                          FlutterFlowTheme.of(context).primary,
-                                          FlutterFlowTheme.of(context)
-                                              .primary
-                                              .withValues(alpha: 0.8),
-                                        ],
-                                      ),
-                                      borderRadius: BorderRadius.circular(12.0),
-                                      border: Border.all(
-                                        color:
-                                            Colors.white.withValues(alpha: 0.3),
-                                        width: 1,
-                                      ),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: FlutterFlowTheme.of(context)
-                                              .primary
-                                              .withValues(alpha: 0.3),
-                                          blurRadius: 8,
-                                          offset: const Offset(0, 2),
-                                        ),
-                                      ],
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.add,
-                                          color: Colors.white,
-                                          size: 18.0,
-                                        ),
-                                        SizedBox(width: 6.0),
-                                        Text(
-                                          'Create Game',
-                                          style: FlutterFlowTheme.of(context)
-                                              .bodyMedium
-                                              .override(
-                                                fontFamily:
-                                                    FlutterFlowTheme.of(context)
-                                                        .bodyMediumFamily,
-                                                color: Colors.white,
-                                                fontSize: 14.0,
-                                                fontWeight: FontWeight.w600,
-                                                letterSpacing: 0.0,
-                                                useGoogleFonts:
-                                                    !FlutterFlowTheme.of(
-                                                            context)
-                                                        .bodyMediumIsCustom,
-                                              ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(12.0),
-                              child: BackdropFilter(
-                                filter:
-                                    ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-                                child: Container(
-                                  width: 140.0,
-                                  decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        Colors.black.withValues(alpha: 0.7),
-                                        Colors.black.withValues(alpha: 0.85),
-                                      ],
-                                    ),
-                                    borderRadius: BorderRadius.circular(12.0),
-                                    border: Border.all(
-                                      color:
-                                          Colors.white.withValues(alpha: 0.3),
-                                      width: 1,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Expanded(
-                                        child: InkWell(
-                                          onTap: () async {
-                                            logFirebaseEvent(
-                                                'Container_update_page_state');
-                                            _model.currentAmOrPm = 'pm';
-                                            safeSetState(() {});
-                                          },
-                                          child: Container(
-                                            padding: EdgeInsets.symmetric(
-                                              vertical: 8.0,
-                                              horizontal: 8.0,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: _model.currentAmOrPm ==
-                                                      'pm'
-                                                  ? FlutterFlowTheme.of(context)
-                                                      .primary
-                                                  : Colors.transparent,
-                                              borderRadius:
-                                                  BorderRadius.circular(10.0),
-                                            ),
-                                            child: Row(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              children: [
-                                                Icon(
-                                                  Icons.dark_mode,
-                                                  color: _model.currentAmOrPm ==
-                                                          'pm'
-                                                      ? Colors.white
-                                                      : Color(0xFF7A7A7A),
-                                                  size: 16.0,
-                                                ),
-                                                SizedBox(width: 4.0),
-                                                Text(
-                                                  'PM',
-                                                  style: FlutterFlowTheme.of(
-                                                          context)
-                                                      .bodyMedium
-                                                      .override(
-                                                        fontFamily:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .bodyMediumFamily,
-                                                        color:
-                                                            _model.currentAmOrPm ==
-                                                                    'pm'
-                                                                ? Colors.white
-                                                                : Color(
-                                                                    0xFF7A7A7A),
-                                                        fontSize: 12.0,
-                                                        fontWeight:
-                                                            _model.currentAmOrPm ==
-                                                                    'pm'
-                                                                ? FontWeight
-                                                                    .w600
-                                                                : FontWeight
-                                                                    .normal,
-                                                        letterSpacing: 0.0,
-                                                        useGoogleFonts:
-                                                            !FlutterFlowTheme
-                                                                    .of(context)
-                                                                .bodyMediumIsCustom,
-                                                      ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                      Expanded(
-                                        child: InkWell(
-                                          onTap: () async {
-                                            logFirebaseEvent(
-                                                'Container_update_page_state');
-                                            _model.currentAmOrPm = 'am';
-                                            safeSetState(() {});
-                                          },
-                                          child: Container(
-                                            padding: EdgeInsets.symmetric(
-                                              vertical: 8.0,
-                                              horizontal: 8.0,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color:
-                                                  _model.currentAmOrPm == 'am'
-                                                      ? Color(0xFF5D9CEC)
-                                                      : Colors.transparent,
-                                              borderRadius:
-                                                  BorderRadius.circular(10.0),
-                                            ),
-                                            child: Row(
-                                              mainAxisAlignment:
-                                                  MainAxisAlignment.center,
-                                              children: [
-                                                Icon(
-                                                  Icons.wb_sunny,
-                                                  color: _model.currentAmOrPm ==
-                                                          'am'
-                                                      ? Colors.white
-                                                      : Color(0xFF7A7A7A),
-                                                  size: 16.0,
-                                                ),
-                                                SizedBox(width: 4.0),
-                                                Text(
-                                                  'AM',
-                                                  style: FlutterFlowTheme.of(
-                                                          context)
-                                                      .bodyMedium
-                                                      .override(
-                                                        fontFamily:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .bodyMediumFamily,
-                                                        color:
-                                                            _model.currentAmOrPm ==
-                                                                    'am'
-                                                                ? Colors.white
-                                                                : Color(
-                                                                    0xFF7A7A7A),
-                                                        fontSize: 12.0,
-                                                        fontWeight:
-                                                            _model.currentAmOrPm ==
-                                                                    'am'
-                                                                ? FontWeight
-                                                                    .w600
-                                                                : FontWeight
-                                                                    .normal,
-                                                        letterSpacing: 0.0,
-                                                        useGoogleFonts:
-                                                            !FlutterFlowTheme
-                                                                    .of(context)
-                                                                .bodyMediumIsCustom,
-                                                      ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
+                  ),
+                );
+              },
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                  child: Container(
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: FlutterFlowTheme.of(context).primary.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                        color: FlutterFlowTheme.of(context).primary,
+                        width: 1,
                       ),
                     ),
-                    Divider(
-                      thickness: 1.0,
-                      color: Color(0x557E859D),
-                    ),
-                    Builder(
-                      builder: (context) {
-                        final getTickets = functions
-                                .getTicketsForDate(
-                                    playnewTicketsRowList.toList(),
-                                    _model.currentAmOrPm,
-                                    _model.currentsportid,
-                                    _model.currentVenueId != null
-                                        ? _model.currentVenueId
-                                        : functions.getMostPopularVenue(
-                                            playnewTicketsRowList.toList(),
-                                            _model.currentAmOrPm,
-                                            _model.currentsportid),
-                                    _model.currentDate != null &&
-                                            _model.currentDate != ''
-                                        ? _model.currentDate
-                                        : dateTimeFormat(
-                                            "d",
-                                            getCurrentTimestamp,
-                                            locale: FFLocalizations.of(context)
-                                                .languageCode,
-                                          ))
-                                ?.toList() ??
-                            [];
-
-                        return SingleChildScrollView(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.max,
-                            children: List.generate(getTickets.length,
-                                (getTicketsIndex) {
-                              final getTicketsItem =
-                                  getTickets[getTicketsIndex];
-                              return Padding(
-                                padding: EdgeInsets.all(12.0),
-                                child: Container(
-                                  decoration: BoxDecoration(),
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.max,
-                                    children: [
-                                      Row(
-                                        mainAxisSize: MainAxisSize.max,
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            getJsonField(
-                                              getTicketsItem,
-                                              r'''$.startTime''',
-                                            ).toString(),
-                                            style: FlutterFlowTheme.of(context)
-                                                .bodyMedium
-                                                .override(
-                                                  fontFamily:
-                                                      FlutterFlowTheme.of(
-                                                              context)
-                                                          .bodyMediumFamily,
-                                                  color: FlutterFlowTheme.of(
-                                                          context)
-                                                      .tertiary,
-                                                  fontSize: 16.0,
-                                                  letterSpacing: 0.0,
-                                                  fontWeight: FontWeight.bold,
-                                                  useGoogleFonts:
-                                                      !FlutterFlowTheme.of(
-                                                              context)
-                                                          .bodyMediumIsCustom,
-                                                ),
-                                          ),
-                                          Padding(
-                                            padding:
-                                                EdgeInsetsDirectional.fromSTEB(
-                                                    12.0, 0.0, 12.0, 0.0),
-                                            child: Column(
-                                              mainAxisSize: MainAxisSize.max,
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                InkWell(
-                                                  splashColor:
-                                                      Colors.transparent,
-                                                  focusColor:
-                                                      Colors.transparent,
-                                                  hoverColor:
-                                                      Colors.transparent,
-                                                  highlightColor:
-                                                      Colors.transparent,
-                                                  onTap: () async {
-                                                    logFirebaseEvent(
-                                                        'Container_navigate_to');
-
-                                                    context.pushNamed(
-                                                      BookticketsWidget
-                                                          .routeName,
-                                                      queryParameters: {
-                                                        'groupid':
-                                                            serializeParam(
-                                                          _model.currentsportid,
-                                                          ParamType.int,
-                                                        ),
-                                                        'ticketid':
-                                                            serializeParam(
-                                                          getJsonField(
-                                                            getTicketsItem,
-                                                            r'''$.ticketid''',
-                                                          ),
-                                                          ParamType.int,
-                                                        ),
-                                                      }.withoutNulls,
-                                                    );
-                                                  },
-                                                  child: Container(
-                                                    width: MediaQuery.sizeOf(
-                                                                context)
-                                                            .width *
-                                                        0.6,
-                                                    decoration: BoxDecoration(
-                                                      color: Color(0x1FFFFFFF),
-                                                      borderRadius:
-                                                          BorderRadius.circular(
-                                                              8.0),
-                                                    ),
-                                                    child: Padding(
-                                                      padding:
-                                                          EdgeInsets.all(12.0),
-                                                      child: Text(
-                                                        getJsonField(
-                                                          getTicketsItem,
-                                                          r'''$.ticketName''',
-                                                        ).toString(),
-                                                        style:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .bodyMedium
-                                                                .override(
-                                                                  fontFamily: FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .bodyMediumFamily,
-                                                                  color: FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .tertiary,
-                                                                  fontSize:
-                                                                      14.0,
-                                                                  letterSpacing:
-                                                                      0.8,
-                                                                  fontWeight:
-                                                                      FontWeight
-                                                                          .w500,
-                                                                  useGoogleFonts:
-                                                                      !FlutterFlowTheme.of(
-                                                                              context)
-                                                                          .bodyMediumIsCustom,
-                                                                ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ].divide(SizedBox(height: 8.0)),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              );
-                            }),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.add_circle_outline,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Create Game',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
                           ),
-                        );
-                      },
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             ),
-          ));
-      },
+          ),
+
+          const SizedBox(width: 10),
+
+          // AM/PM toggle
+          Expanded(
+            flex: 1,
+            child: _buildTimeToggle(),
+          ),
+        ],
+      ),
     );
+  }
+
+  Widget _buildTimeToggle() {
+    // Check if selected date is today AND it's past noon (disable AM only for today)
+    final now = DateTime.now();
+    final isToday = DateFormat('yyyy-MM-dd').format(_model.selectedDate) ==
+        DateFormat('yyyy-MM-dd').format(now);
+    final isAfternoon = now.hour >= 12;
+    final shouldDisableAM = isToday && isAfternoon;
+
+    // If it's afternoon on today and AM is selected, auto-switch to PM
+    if (shouldDisableAM && _model.currentAmOrPm == 'am') {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          safeSetState(() {
+            _model.currentAmOrPm = 'pm';
+          });
+          _loadGames();
+        }
+      });
+    }
+
+    return Container(
+      height: 40,
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: 0.15),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(child: _buildTimeOption('am', 'AM', disabled: shouldDisableAM)),
+          Expanded(child: _buildTimeOption('pm', 'PM')),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTimeOption(String value, String label, {bool disabled = false}) {
+    final isSelected = _model.currentAmOrPm == value;
+    // Use orange for AM (day/sun), dark purple for PM (night sky)
+    final selectedColor = value == 'am'
+        ? Colors.orange
+        : const Color(0xFF4A148C); // Deep purple/night sky
+
+    return InkWell(
+      onTap: disabled ? null : () {
+        safeSetState(() {
+          _model.currentAmOrPm = value;
+        });
+        _loadGames();
+      },
+      child: Container(
+        margin: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: disabled
+              ? Colors.white.withValues(alpha: 0.05)
+              : (isSelected ? selectedColor : Colors.transparent),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: disabled
+                  ? Colors.white.withValues(alpha: 0.3)
+                  : Colors.white,
+              fontSize: 13,
+              fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+              decoration: disabled ? TextDecoration.lineThrough : null,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Build games list
+  Widget _buildGamesList() {
+    if (_model.isLoadingGames) {
+      return SliverFillRemaining(
+        child: Center(
+          child: SpinKitRing(
+            color: FlutterFlowTheme.of(context).primary,
+            size: 50.0,
+          ),
+        ),
+      );
+    }
+
+    if (_model.games.isEmpty) {
+      return SliverFillRemaining(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.sports_tennis,
+                size: 64,
+                color: Colors.white.withValues(alpha: 0.3),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'No games available',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.6),
+                  fontSize: 16,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Be the first to create one!',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.4),
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return SliverPadding(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      sliver: SliverList(
+        delegate: SliverChildBuilderDelegate(
+          (context, index) {
+            final game = _model.games[index];
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: GameCard(
+                game: game,
+                onTap: () async {
+                  await Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => GameDetailsPage(gameId: game.id),
+                    ),
+                  );
+                  // Refresh games after viewing details (in case user joined)
+                  _loadGames();
+                },
+              ),
+            );
+          },
+          childCount: _model.games.length,
+        ),
+      ),
+    );
+  }
+
+  /// Get formatted distance and time text for selected venue
+  String? _getVenueDistanceText() {
+    if (_model.selectedVenueId == null) return null;
+
+    final venueId = _model.selectedVenueId!;
+    final distance = _model.venueDistances[venueId];
+    final duration = _model.venueDurations[venueId];
+
+    if (distance == null && duration == null) return null;
+
+    final parts = <String>[];
+
+    if (distance != null) {
+      parts.add('${distance.toStringAsFixed(1)} km');
+    }
+
+    if (duration != null) {
+      parts.add('${duration} min');
+    }
+
+    return parts.join(' • ');
   }
 }
 
-// Location Search Dialog with Google Places Autocomplete
+/// Location Search Dialog
 class _LocationSearchDialog extends StatefulWidget {
   final String? currentLocation;
   final Function(String placeId, String description, LatLng latLng)
@@ -2019,76 +1264,51 @@ class _LocationSearchDialog extends StatefulWidget {
 
 class _LocationSearchDialogState extends State<_LocationSearchDialog> {
   final TextEditingController _searchController = TextEditingController();
-  List<dynamic> _searchResults = [];
-  bool _isSearching = false;
+  List<dynamic> _predictions = [];
   bool _isLoading = false;
 
   @override
-  void initState() {
-    super.initState();
-    _searchController.addListener(_onSearchChanged);
-  }
-
-  @override
   void dispose() {
-    _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
     super.dispose();
   }
 
-  void _onSearchChanged() {
-    final query = _searchController.text.trim();
-    if (query.isEmpty) {
+  Future<void> _searchPlaces(String input) async {
+    if (input.isEmpty) {
       setState(() {
-        _searchResults = [];
-        _isSearching = false;
+        _predictions = [];
       });
       return;
     }
 
     setState(() {
-      _isSearching = true;
+      _isLoading = true;
     });
 
-    Future.delayed(Duration(milliseconds: 500), () {
-      if (_searchController.text.trim() == query) {
-        _performSearch(query);
-      }
-    });
-  }
-
-  Future<void> _performSearch(String query) async {
     try {
-      final results = await actions.searchPlaces(query);
+      final predictions = await actions.searchPlaces(input);
       if (mounted) {
         setState(() {
-          _searchResults = results;
-          _isSearching = false;
+          _predictions = predictions;
+          _isLoading = false;
         });
       }
     } catch (e) {
-      print('Error searching: $e');
+      print('Error searching places: $e');
       if (mounted) {
         setState(() {
-          _searchResults = [];
-          _isSearching = false;
+          _isLoading = false;
         });
       }
     }
   }
 
   Future<void> _selectPlace(String placeId, String description) async {
-    setState(() {
-      _isLoading = true;
-    });
-
     try {
-      final latLng = await actions.geocodePlace(placeId);
-      if (latLng != null) {
-        widget.onLocationSelected(placeId, description, latLng);
-        if (mounted) {
-          Navigator.of(context).pop();
-        }
+      final coordinates = await actions.geocodePlace(placeId);
+      if (coordinates != null && mounted) {
+        widget.onLocationSelected(placeId, description, coordinates);
+        Navigator.of(context).pop();
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -2109,12 +1329,6 @@ class _LocationSearchDialogState extends State<_LocationSearchDialog> {
           ),
         );
       }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
     }
   }
 
@@ -2126,7 +1340,7 @@ class _LocationSearchDialogState extends State<_LocationSearchDialog> {
         borderRadius: BorderRadius.circular(16.0),
       ),
       title: Text(
-        'Search Location',
+        'Select Location',
         style: FlutterFlowTheme.of(context).headlineSmall.override(
               fontFamily: FlutterFlowTheme.of(context).headlineSmallFamily,
               color: Colors.white,
@@ -2135,179 +1349,107 @@ class _LocationSearchDialogState extends State<_LocationSearchDialog> {
                   !FlutterFlowTheme.of(context).headlineSmallIsCustom,
             ),
       ),
-      content: SingleChildScrollView(
-        child: Container(
-          width: MediaQuery.of(context).size.width * 0.9,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _searchController,
-                autofocus: true,
-                style: FlutterFlowTheme.of(context).bodyMedium.override(
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _searchController,
+              onChanged: _searchPlaces,
+              style: FlutterFlowTheme.of(context).bodyMedium.override(
+                    fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                    color: Colors.white,
+                    letterSpacing: 0.0,
+                    useGoogleFonts:
+                        !FlutterFlowTheme.of(context).bodyMediumIsCustom,
+                  ),
+              decoration: InputDecoration(
+                hintText: 'Search for sector, city, or area',
+                hintStyle: FlutterFlowTheme.of(context).bodyMedium.override(
                       fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                      color: Colors.white,
+                      color: Colors.white.withValues(alpha: 0.5),
                       letterSpacing: 0.0,
                       useGoogleFonts:
                           !FlutterFlowTheme.of(context).bodyMediumIsCustom,
                     ),
-                decoration: InputDecoration(
-                  hintText: 'Search for sector, city, or area',
-                  hintStyle: FlutterFlowTheme.of(context).bodyMedium.override(
-                        fontFamily:
-                            FlutterFlowTheme.of(context).bodyMediumFamily,
-                        color: Colors.grey[600],
-                        letterSpacing: 0.0,
-                        useGoogleFonts:
-                            !FlutterFlowTheme.of(context).bodyMediumIsCustom,
-                      ),
-                  filled: true,
-                  fillColor: Color(0xFF2C2C2E),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(8.0),
-                    borderSide: BorderSide.none,
-                  ),
-                  prefixIcon: Icon(
-                    Icons.search,
-                    color: FlutterFlowTheme.of(context).primary,
-                  ),
-                  suffixIcon: _searchController.text.isNotEmpty
-                      ? IconButton(
-                          icon: Icon(Icons.clear, color: Colors.grey[600]),
-                          onPressed: () {
-                            _searchController.clear();
-                          },
-                        )
-                      : null,
+                prefixIcon: Icon(Icons.search,
+                    color: Colors.white.withValues(alpha: 0.7)),
+                filled: true,
+                fillColor: Colors.white.withValues(alpha: 0.1),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12.0),
+                  borderSide: BorderSide.none,
                 ),
               ),
-              SizedBox(height: 16.0),
-              Container(
-                constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(context).size.height * 0.4,
+            ),
+            SizedBox(height: 16.0),
+            if (_isLoading)
+              CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  FlutterFlowTheme.of(context).primary,
                 ),
-                child: _isLoading
-                    ? Center(
-                        child: CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            FlutterFlowTheme.of(context).primary,
+              )
+            else if (_predictions.isNotEmpty)
+              ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: 300),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _predictions.length,
+                  itemBuilder: (context, index) {
+                    final prediction = _predictions[index];
+                    final description = prediction['description'] ?? '';
+                    final placeId = prediction['place_id'] ?? '';
+
+                    return InkWell(
+                      onTap: () => _selectPlace(placeId, description),
+                      child: Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 12.0,
+                          vertical: 12.0,
+                        ),
+                        decoration: BoxDecoration(
+                          border: Border(
+                            bottom: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.1),
+                              width: 1,
+                            ),
                           ),
                         ),
-                      )
-                    : _isSearching
-                        ? Center(
-                            child: CircularProgressIndicator(
-                              valueColor: AlwaysStoppedAnimation<Color>(
-                                FlutterFlowTheme.of(context).primary,
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.location_on,
+                              color: FlutterFlowTheme.of(context).primary,
+                              size: 20,
+                            ),
+                            SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                description,
+                                style: FlutterFlowTheme.of(context)
+                                    .bodyMedium
+                                    .override(
+                                      fontFamily: FlutterFlowTheme.of(context)
+                                          .bodyMediumFamily,
+                                      color: Colors.white,
+                                      letterSpacing: 0.0,
+                                      useGoogleFonts:
+                                          !FlutterFlowTheme.of(context)
+                                              .bodyMediumIsCustom,
+                                    ),
                               ),
                             ),
-                          )
-                        : _searchResults.isEmpty
-                            ? Center(
-                                child: Text(
-                                  _searchController.text.isEmpty
-                                      ? 'Start typing to search...'
-                                      : 'No results found',
-                                  style: FlutterFlowTheme.of(context)
-                                      .bodyMedium
-                                      .override(
-                                        fontFamily: FlutterFlowTheme.of(context)
-                                            .bodyMediumFamily,
-                                        color: Colors.grey[400],
-                                        letterSpacing: 0.0,
-                                        useGoogleFonts:
-                                            !FlutterFlowTheme.of(context)
-                                                .bodyMediumIsCustom,
-                                      ),
-                                ),
-                              )
-                            : ListView.builder(
-                                shrinkWrap: true,
-                                physics: NeverScrollableScrollPhysics(),
-                                itemCount: _searchResults.length,
-                                itemBuilder: (context, index) {
-                                  final place = _searchResults[index];
-                                  final description =
-                                      place['description'] as String;
-                                  final placeId = place['place_id'] as String;
-
-                                  return InkWell(
-                                    onTap: () =>
-                                        _selectPlace(placeId, description),
-                                    child: Container(
-                                      padding: EdgeInsets.symmetric(
-                                        horizontal: 12.0,
-                                        vertical: 12.0,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        border: Border(
-                                          bottom: BorderSide(
-                                            color: Color(0xFF2C2C2E),
-                                            width: 1.0,
-                                          ),
-                                        ),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            Icons.location_on,
-                                            color: FlutterFlowTheme.of(context)
-                                                .primary,
-                                            size: 20.0,
-                                          ),
-                                          SizedBox(width: 12.0),
-                                          Expanded(
-                                            child: Text(
-                                              description,
-                                              style:
-                                                  FlutterFlowTheme.of(context)
-                                                      .bodyMedium
-                                                      .override(
-                                                        fontFamily:
-                                                            FlutterFlowTheme.of(
-                                                                    context)
-                                                                .bodyMediumFamily,
-                                                        color: Colors.white,
-                                                        fontSize: 14.0,
-                                                        letterSpacing: 0.0,
-                                                        useGoogleFonts:
-                                                            !FlutterFlowTheme
-                                                                    .of(context)
-                                                                .bodyMediumIsCustom,
-                                                      ),
-                                            ),
-                                          ),
-                                          Icon(
-                                            Icons.arrow_forward_ios,
-                                            color: Colors.grey[600],
-                                            size: 16.0,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
               ),
-            ],
-          ),
+          ],
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text(
-            'Cancel',
-            style: FlutterFlowTheme.of(context).bodyMedium.override(
-                  fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                  color: Colors.grey[400],
-                  letterSpacing: 0.0,
-                  useGoogleFonts:
-                      !FlutterFlowTheme.of(context).bodyMediumIsCustom,
-                ),
-          ),
-        ),
-      ],
     );
   }
 }

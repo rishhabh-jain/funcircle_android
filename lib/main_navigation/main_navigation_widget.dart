@@ -5,6 +5,7 @@ import 'dart:ui';
 import '../funcirclefinalapp/home_new/home_new_widget.dart';
 import '../find_players_new/find_players_new_widget.dart';
 import '../funcirclefinalapp/playnew/playnew_widget.dart';
+import '../venue_booking/venue_booking_widget.dart';
 import '../chatsnew/chatsnew_widget.dart';
 import 'main_navigation_model.dart';
 export 'main_navigation_model.dart';
@@ -16,10 +17,10 @@ class MainNavigationWidget extends StatefulWidget {
   static String routePath = '/mainNavigation';
 
   @override
-  State<MainNavigationWidget> createState() => _MainNavigationWidgetState();
+  State<MainNavigationWidget> createState() => MainNavigationWidgetState();
 }
 
-class _MainNavigationWidgetState extends State<MainNavigationWidget> {
+class MainNavigationWidgetState extends State<MainNavigationWidget> {
   late MainNavigationModel _model;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
@@ -36,6 +37,13 @@ class _MainNavigationWidgetState extends State<MainNavigationWidget> {
     super.dispose();
   }
 
+  // Public method to switch tabs from child widgets
+  void switchToTab(int index) {
+    setState(() {
+      _model.updatePageIndex(index);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -49,6 +57,7 @@ class _MainNavigationWidgetState extends State<MainNavigationWidget> {
             HomeNewWidget(),
             FindPlayersNewWidget(),
             PlaynewWidget(),
+            VenueBookingWidget(),
             ChatsnewWidget(),
           ],
         ),
@@ -62,6 +71,7 @@ class _MainNavigationWidgetState extends State<MainNavigationWidget> {
       {'icon': Icons.home_rounded, 'label': 'Home'},
       {'icon': Icons.explore_rounded, 'label': 'Find'},
       {'icon': Icons.sports_tennis_rounded, 'label': 'Play'},
+      {'icon': Icons.calendar_today_rounded, 'label': 'Book'},
       {'icon': Icons.forum_rounded, 'label': 'Chats'},
     ];
 

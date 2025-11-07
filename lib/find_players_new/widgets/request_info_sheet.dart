@@ -7,6 +7,8 @@ import '../models/player_request_model.dart';
 import '../models/skill_level.dart';
 import '../services/location_service.dart';
 import '../services/map_service.dart';
+import '../services/quick_match_service.dart';
+import 'edit_request_dialog.dart';
 
 /// Bottom sheet showing player request information
 class RequestInfoSheet extends StatefulWidget {
@@ -90,15 +92,42 @@ class _RequestInfoSheetState extends State<RequestInfoSheet> {
                         style: FlutterFlowTheme.of(context).titleMedium,
                       ),
                       Text(
-                        'Looking for players',
+                        widget.request.userId == widget.currentUserId
+                            ? 'Your Request'
+                            : 'Looking for players',
                         style: FlutterFlowTheme.of(context).bodySmall.override(
                               fontFamily: 'Readex Pro',
-                              color: Colors.grey,
+                              color: widget.request.userId == widget.currentUserId
+                                  ? Colors.orange
+                                  : Colors.grey,
                             ),
                       ),
                     ],
                   ),
                 ),
+                // Edit and Cancel buttons for creator
+                if (widget.request.userId == widget.currentUserId &&
+                    widget.request.status != 'fulfilled' &&
+                    widget.request.status != 'expired' &&
+                    widget.request.status != 'cancelled') ...[
+                  IconButton(
+                    icon: const Icon(Icons.edit_outlined, size: 20),
+                    onPressed: _showEditRequestDialog,
+                    color: Colors.blue,
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.blue.withOpacity(0.1),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded, size: 20),
+                    onPressed: _showCancelRequestDialog,
+                    color: Colors.red,
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.red.withOpacity(0.1),
+                    ),
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 20),
@@ -267,5 +296,77 @@ class _RequestInfoSheetState extends State<RequestInfoSheet> {
     if (hexString.length == 6 || hexString.length == 7) buffer.write('ff');
     buffer.write(hexString.replaceFirst('#', ''));
     return Color(int.parse(buffer.toString(), radix: 16));
+  }
+
+  Future<void> _showCancelRequestDialog() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Text(
+          'Cancel Request?',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'Are you sure you want to cancel this request? Users who showed interest will be notified.',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('No', style: TextStyle(color: Colors.white54)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(
+              backgroundColor: Colors.red.withValues(alpha: 0.2),
+            ),
+            child: const Text('Yes, Cancel', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        final success = await QuickMatchService.cancelRequest(
+          requestId: widget.request.id,
+          userId: widget.currentUserId,
+        );
+
+        if (success && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Request cancelled successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          Navigator.pop(context); // Close the bottom sheet
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to cancel request: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _showEditRequestDialog() async {
+    await showDialog(
+      context: context,
+      builder: (context) => EditRequestDialog(
+        request: widget.request,
+        onSuccess: () {
+          // Close the bottom sheet after successful edit
+          Navigator.pop(context);
+        },
+      ),
+    );
   }
 }

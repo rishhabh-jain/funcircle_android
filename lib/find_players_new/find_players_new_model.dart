@@ -21,7 +21,7 @@ class FindPlayersNewModel extends FlutterFlowModel<FindPlayersNewWidget> {
   final googleMapsController = Completer<GoogleMapController>();
 
   // Current sport type (badminton or pickleball)
-  String currentSport = 'Badminton';
+  String currentSport = 'badminton';
 
   // Loading states
   bool isLoadingMarkers = false;
@@ -35,6 +35,7 @@ class FindPlayersNewModel extends FlutterFlowModel<FindPlayersNewWidget> {
   List<PlayerRequestModel> playerRequests = [];
   List<UserLocationModel> availablePlayers = [];
   List<GameSessionModel> gameSessions = [];
+  List<Map<String, dynamic>> playNowGames = [];
 
   // Map markers
   Set<gmaps.Marker> markers = {};
@@ -43,6 +44,9 @@ class FindPlayersNewModel extends FlutterFlowModel<FindPlayersNewWidget> {
   bool isHeatMapMode = false;
   bool isLoadingHeatMap = false;
   Set<gmaps.Circle> heatMapCircles = {};
+
+  // User visibility on map
+  bool isUserVisibleOnMap = false;
 
   // Filters
   int? selectedSkillLevel;
@@ -78,12 +82,14 @@ class FindPlayersNewModel extends FlutterFlowModel<FindPlayersNewWidget> {
         MapService.getActiveRequestsBySport(currentSport),
         MapService.getAvailablePlayersBySport(currentSport),
         MapService.getGameSessionsBySport(currentSport),
+        MapService.getPlayNowGamesBySport(currentSport),
       ]);
 
       venues = results[0] as List<VenueMarkerModel>;
       playerRequests = results[1] as List<PlayerRequestModel>;
       availablePlayers = results[2] as List<UserLocationModel>;
       gameSessions = results[3] as List<GameSessionModel>;
+      playNowGames = results[4] as List<Map<String, dynamic>>;
 
       // Generate markers after loading data
       await generateMarkers();
@@ -273,14 +279,52 @@ class FindPlayersNewModel extends FlutterFlowModel<FindPlayersNewWidget> {
     }).toList();
   }
 
+  /// Get filtered venues based on current sport
+  List<VenueMarkerModel> get filteredVenues {
+    return venues.where((venue) {
+      // Filter by sport type - show if venue supports current sport or both sports
+      if (venue.sportType == null)
+        return true; // Show venues without sport type
+      if (venue.sportType == 'both')
+        return true; // Show venues that support both sports
+      if (venue.sportType == currentSport)
+        return true; // Show venues for current sport
+      return false;
+    }).toList();
+  }
+
+  /// Get filtered playnow games
+  List<Map<String, dynamic>> get filteredPlayNowGames {
+    return playNowGames.where((game) {
+      // Only show open games
+      if (game['status'] != 'open') return false;
+
+      // Skill level filter
+      if (selectedSkillLevel != null &&
+          game['skill_level'] != null &&
+          game['skill_level'] != selectedSkillLevel) {
+        return false;
+      }
+
+      // Distance filter - playnow games don't have lat/lng yet in the fetch
+      // So we'll skip distance filtering for now
+      // TODO: Add venue lat/lng to games query if needed
+
+      return true;
+    }).toList();
+  }
+
   /// Generate map markers from filtered data
   Future<void> generateMarkers() async {
     final newMarkers = <gmaps.Marker>{};
 
     try {
-      // Generate venue markers
-      for (final venue in venues) {
-        final icon = await MapMarkerBuilder.createVenueMarker();
+      // Generate venue markers (filtered by sport)
+      for (final venue in filteredVenues) {
+        final icon = await MapMarkerBuilder.createVenueMarker(
+          venueName: venue.name,
+          sportType: venue.sportType,
+        );
         newMarkers.add(
           gmaps.Marker(
             markerId: gmaps.MarkerId('venue_${venue.id}'),
@@ -310,51 +354,6 @@ class FindPlayersNewModel extends FlutterFlowModel<FindPlayersNewWidget> {
             onTap: () => onPlayerMarkerTapped?.call(player),
           ),
         );
-      }
-
-      // Generate request markers (filtered)
-      for (final request in filteredRequests) {
-        if (request.latLng != null) {
-          final icon = await MapMarkerBuilder.createRequestMarker(
-            playersNeeded: request.playersNeeded,
-            skillLevel: request.skillLevel,
-          );
-          newMarkers.add(
-            gmaps.Marker(
-              markerId: gmaps.MarkerId('request_${request.id}'),
-              position: gmaps.LatLng(request.latitude!, request.longitude!),
-              icon: icon,
-              infoWindow: gmaps.InfoWindow(
-                title:
-                    'Need ${request.playersNeeded} player${request.playersNeeded > 1 ? 's' : ''}',
-              ),
-              onTap: () => onRequestMarkerTapped?.call(request),
-            ),
-          );
-        }
-      }
-
-      // Generate session markers (filtered)
-      for (final session in filteredSessions) {
-        if (session.latLng != null) {
-          final icon = await MapMarkerBuilder.createSessionMarker(
-            currentPlayers: session.joinedPlayersCount,
-            maxPlayers: session.maxPlayers,
-            playerPictures: [],
-          );
-          newMarkers.add(
-            gmaps.Marker(
-              markerId: gmaps.MarkerId('session_${session.id}'),
-              position: gmaps.LatLng(session.latitude!, session.longitude!),
-              icon: icon,
-              infoWindow: gmaps.InfoWindow(
-                title:
-                    'Game Session ${session.joinedPlayersCount}/${session.maxPlayers}',
-              ),
-              onTap: () => onSessionMarkerTapped?.call(session),
-            ),
-          );
-        }
       }
 
       markers = newMarkers;
@@ -416,6 +415,26 @@ class FindPlayersNewModel extends FlutterFlowModel<FindPlayersNewWidget> {
       heatMapCircles = {};
     } finally {
       isLoadingHeatMap = false;
+    }
+  }
+
+  /// Toggle user visibility on map
+  Future<void> toggleUserVisibility(String userId) async {
+    isUserVisibleOnMap = !isUserVisibleOnMap;
+
+    try {
+      // Update user location availability in database
+      await MapService.updateUserVisibility(
+        userId: userId,
+        isAvailable: isUserVisibleOnMap,
+        sportType: currentSport,
+        latitude: userLocation?.latitude,
+        longitude: userLocation?.longitude,
+      );
+    } catch (e) {
+      print('Error updating user visibility: $e');
+      // Revert on error
+      isUserVisibleOnMap = !isUserVisibleOnMap;
     }
   }
 }

@@ -141,6 +141,12 @@ class _SettingsScreenWidgetState extends State<SettingsScreenWidget> with Ticker
 
                                   const SizedBox(height: 24),
 
+                                  // Rewards Section
+                                  _buildSectionHeader('Rewards', Icons.card_giftcard),
+                                  _buildRewardsSection(),
+
+                                  const SizedBox(height: 24),
+
                                   // Privacy Section
                                   _buildSectionHeader('Privacy', Icons.lock_outline),
                                   _buildPrivacySection(),
@@ -398,6 +404,62 @@ class _SettingsScreenWidgetState extends State<SettingsScreenWidget> with Ticker
                     _updateSetting('chat_notifications', value);
                   },
                   accentColor: Colors.orange,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRewardsSection() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+          child: Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Colors.white.withValues(alpha: 0.12),
+                  Colors.white.withValues(alpha: 0.04),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.15),
+                width: 1.5,
+              ),
+            ),
+            child: Column(
+              children: [
+                _buildNavigationTile(
+                  icon: Icons.card_giftcard,
+                  title: 'Refer & Earn',
+                  subtitle: 'Get ₹50 for each referral',
+                  onTap: () => context.pushNamed('ReferralsScreen'),
+                  accentColor: Colors.orange,
+                ),
+                _buildDivider(),
+                _buildNavigationTile(
+                  icon: Icons.local_offer,
+                  title: 'My Offers',
+                  subtitle: 'View available discounts',
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Offers are automatically applied during payment'),
+                        backgroundColor: Colors.orange,
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+                  accentColor: Colors.purple,
                 ),
               ],
             ),
@@ -784,7 +846,7 @@ class _SettingsScreenWidgetState extends State<SettingsScreenWidget> with Ticker
           if (confirm == true && mounted) {
             await authManager.signOut();
             if (context.mounted) {
-              context.goNamedAuth('login', context.mounted);
+              context.goNamed(WelcomeScreen.routeName);
             }
           }
         },
@@ -832,22 +894,153 @@ class _SettingsScreenWidgetState extends State<SettingsScreenWidget> with Ticker
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: GestureDetector(
         onTap: () async {
+          final userEmail = currentUserEmail;
+          final userPhone = currentPhoneNumber;
+          final String verificationText = userEmail.isNotEmpty ? userEmail : userPhone;
+
+          // Create controller that will be managed by the dialog
+          TextEditingController? controller;
+
           final confirm = await showDialog<bool>(
             context: context,
-            builder: (context) => _buildConfirmDialog(
-              title: 'Delete Account',
-              content: 'Are you sure you want to delete your account? This action cannot be undone.',
-              confirmText: 'Delete',
-              confirmColor: Colors.red,
-            ),
+            barrierDismissible: false,
+            builder: (context) {
+              // Create controller inside builder so it's part of the dialog lifecycle
+              controller = TextEditingController();
+
+              return StatefulBuilder(
+                builder: (context, setState) {
+                  return AlertDialog(
+                  backgroundColor: const Color(0xFF1E1E1E),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    side: BorderSide(
+                      color: Colors.red.withValues(alpha: 0.3),
+                      width: 1.5,
+                    ),
+                  ),
+                  title: const Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+                      SizedBox(width: 12),
+                      Text(
+                        'Delete Account',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  content: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'This action cannot be undone. All your data will be permanently deleted.',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontSize: 14,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      Text(
+                        'To confirm, please enter your ${userEmail.isNotEmpty ? "email" : "phone number"}:',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        verificationText,
+                        style: TextStyle(
+                          color: Colors.red.withValues(alpha: 0.9),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      TextField(
+                        controller: controller!,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: userEmail.isNotEmpty ? 'Enter your email' : 'Enter your phone number',
+                          hintStyle: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.3),
+                          ),
+                          filled: true,
+                          fillColor: Colors.white.withValues(alpha: 0.05),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.2),
+                            ),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: Colors.white.withValues(alpha: 0.2),
+                            ),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: const BorderSide(
+                              color: Colors.red,
+                              width: 2,
+                            ),
+                          ),
+                        ),
+                        onChanged: (_) => setState(() {}),
+                      ),
+                    ],
+                  ),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: Text(
+                        'Cancel',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: controller!.text.trim() == verificationText
+                          ? () => Navigator.pop(context, true)
+                          : null,
+                      child: Text(
+                        'Delete Account',
+                        style: TextStyle(
+                          color: controller!.text.trim() == verificationText
+                              ? Colors.red
+                              : Colors.grey,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                );
+              },
+            );
+          },
           );
 
-          if (confirm == true) {
+          // Dispose controller after a frame to ensure dialog animation is complete
+          if (controller != null) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              controller?.dispose();
+            });
+          }
+
+          if (confirm == true && mounted) {
             try {
               await _service.deleteAccount(currentUserUid);
               await authManager.signOut();
               if (context.mounted) {
-                context.goNamedAuth('login', context.mounted);
+                context.goNamed(WelcomeScreen.routeName);
               }
             } catch (e) {
               if (context.mounted) {
@@ -1081,6 +1274,7 @@ class _SettingsScreenWidgetState extends State<SettingsScreenWidget> with Ticker
       ],
     );
   }
+
 }
 
 class _SettingsBackgroundPainter extends CustomPainter {

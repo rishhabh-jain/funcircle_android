@@ -2,6 +2,7 @@ import '/backend/supabase/supabase.dart';
 import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
+import '/screens/chat/widgets/room_invite_sheet.dart';
 import 'package:flutter/material.dart';
 import 'chat_room_info_model.dart';
 export 'chat_room_info_model.dart';
@@ -360,6 +361,57 @@ class _ChatRoomInfoWidgetState extends State<ChatRoomInfoWidget> {
                       thickness: 1.0,
                       color: FlutterFlowTheme.of(context).secondaryText
                           .withValues(alpha: 0.2),
+                    ),
+
+                    // Invite Players Button
+                    Padding(
+                      padding:
+                          EdgeInsetsDirectional.fromSTEB(16.0, 16.0, 16.0, 16.0),
+                      child: InkWell(
+                        onTap: () {
+                          showModalBottomSheet(
+                            context: context,
+                            isScrollControlled: true,
+                            backgroundColor: Colors.transparent,
+                            builder: (context) => RoomInviteSheet(
+                              roomId: widget.roomId ?? '',
+                              roomName: _model.chatRoom?.name ?? 'Chat Room',
+                            ),
+                          );
+                        },
+                        child: Container(
+                          padding: EdgeInsets.all(16.0),
+                          decoration: BoxDecoration(
+                            color: FlutterFlowTheme.of(context).primary,
+                            borderRadius: BorderRadius.circular(12.0),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.person_add,
+                                color: FlutterFlowTheme.of(context).info,
+                                size: 24.0,
+                              ),
+                              SizedBox(width: 12.0),
+                              Text(
+                                'Invite Players',
+                                style: FlutterFlowTheme.of(context)
+                                    .titleMedium
+                                    .override(
+                                      fontFamily: FlutterFlowTheme.of(context)
+                                          .titleMediumFamily,
+                                      color: FlutterFlowTheme.of(context).info,
+                                      letterSpacing: 0.0,
+                                      fontWeight: FontWeight.w600,
+                                      useGoogleFonts: !FlutterFlowTheme.of(context)
+                                          .titleMediumIsCustom,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     ),
 
                     // Members Section

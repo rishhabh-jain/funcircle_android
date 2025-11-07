@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'dart:ui';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import '/auth/firebase_auth/auth_util.dart';
+import '/backend/supabase/supabase.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
 import 'settings_model.dart';
@@ -540,7 +541,7 @@ class _SettingsWidgetState extends State<SettingsWidget> with TickerProviderStat
           GoRouter.of(context).prepareAuthEvent();
           await authManager.signOut();
           GoRouter.of(context).clearRedirectLocation();
-          context.goNamedAuth(OnboardingWidget.routeName, context.mounted);
+          context.goNamedAuth(WelcomeScreen.routeName, context.mounted);
         },
         child: Container(
           height: 54,
@@ -755,59 +756,172 @@ class _SettingsWidgetState extends State<SettingsWidget> with TickerProviderStat
     );
   }
 
-  void _showDeleteConfirmation() {
-    showDialog(
+  void _showDeleteConfirmation() async {
+    final userEmail = currentUserEmail;
+    final userPhone = currentPhoneNumber;
+    final String verificationText = userEmail.isNotEmpty ? userEmail : userPhone;
+
+    // Create controller that will be managed by the dialog
+    TextEditingController? controller;
+
+    final confirm = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(
-            color: Colors.red.withValues(alpha: 0.3),
-            width: 1.5,
-          ),
-        ),
-        title: const Text(
-          'Delete Account?',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        content: Text(
-          'This action cannot be undone. All your data will be permanently deleted.',
-          style: TextStyle(
-            color: Colors.white.withValues(alpha: 0.7),
-            fontSize: 14,
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text(
-              'Cancel',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.7),
+      barrierDismissible: false,
+      builder: (context) {
+        // Create controller inside builder so it's part of the dialog lifecycle
+        controller = TextEditingController();
+
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+            backgroundColor: const Color(0xFF1E1E1E),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              side: BorderSide(
+                color: Colors.red.withValues(alpha: 0.3),
+                width: 1.5,
               ),
             ),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // Implement delete account logic
-            },
-            child: const Text(
-              'Delete',
-              style: TextStyle(
-                color: Colors.red,
-                fontWeight: FontWeight.bold,
-              ),
+            title: const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.red, size: 28),
+                SizedBox(width: 12),
+                Text(
+                  'Delete Account',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
             ),
-          ),
-        ],
-      ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'This action cannot be undone. All your data will be permanently deleted.',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  'To confirm, please enter your ${userEmail.isNotEmpty ? "email" : "phone number"}:',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  verificationText,
+                  style: TextStyle(
+                    color: Colors.red.withValues(alpha: 0.9),
+                    fontSize: 13,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: controller!,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: userEmail.isNotEmpty ? 'Enter your email' : 'Enter your phone number',
+                    hintStyle: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.3),
+                    ),
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.05),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: Colors.white.withValues(alpha: 0.2),
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                        color: Colors.red,
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                  onChanged: (_) => setState(() {}),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: Text(
+                  'Cancel',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.7),
+                  ),
+                ),
+              ),
+              TextButton(
+                onPressed: controller!.text.trim() == verificationText
+                    ? () => Navigator.pop(context, true)
+                    : null,
+                child: Text(
+                  'Delete Account',
+                  style: TextStyle(
+                    color: controller!.text.trim() == verificationText
+                        ? Colors.red
+                        : Colors.grey,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      );
+      },
     );
+
+    // Dispose controller after a frame to ensure dialog animation is complete
+    if (controller != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        controller?.dispose();
+      });
+    }
+
+    if (confirm == true && mounted) {
+      try {
+        // Mark user as deleted in Supabase
+        await SupaFlow.client.from('users').update({
+          'deleted_at': DateTime.now().toIso8601String(),
+        }).eq('user_id', currentUserUid);
+
+        // Sign out and navigate to welcome screen
+        await authManager.signOut();
+        if (context.mounted) {
+          context.goNamed(WelcomeScreen.routeName);
+        }
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to delete account: $e'),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    }
   }
 }
 

@@ -40,7 +40,8 @@ class HeatMapService {
 
       // Fetch player requests
       final requestsQuery = _client
-          .from('findplayers.player_requests')
+          .schema('findplayers')
+          .from('player_requests')
           .select('latitude, longitude, scheduled_time')
           .eq('sport_type', sportType)
           .gt('created_at', cutoffDate)
@@ -49,7 +50,8 @@ class HeatMapService {
 
       // Fetch game sessions
       final sessionsQuery = _client
-          .from('findplayers.game_sessions')
+          .schema('findplayers')
+          .from('game_sessions')
           .select('latitude, longitude, scheduled_time')
           .eq('sport_type', sportType)
           .gt('created_at', cutoffDate)

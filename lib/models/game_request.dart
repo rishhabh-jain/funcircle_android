@@ -19,6 +19,14 @@ class GameRequest {
   final String? venueName;
   final DateTime? proposedDateTime;
 
+  // New fields for integration
+  final String source; // 'general', 'findplayers', 'playnow'
+  final String requestType; // 'player_request', 'game_join', 'duo_request', 'game_request'
+  final String? gameId; // For playnow requests
+  final String? gameTitle; // For playnow requests
+  final int? playersNeeded; // For findplayers requests
+  final int? currentPlayers; // For playnow game capacity
+
   GameRequest({
     required this.requestId,
     required this.senderId,
@@ -37,6 +45,12 @@ class GameRequest {
     this.venueId,
     this.venueName,
     this.proposedDateTime,
+    this.source = 'general',
+    this.requestType = 'game_request',
+    this.gameId,
+    this.gameTitle,
+    this.playersNeeded,
+    this.currentPlayers,
   });
 
   factory GameRequest.fromJson(Map<String, dynamic> json) {
@@ -62,6 +76,12 @@ class GameRequest {
       proposedDateTime: json['proposed_date_time'] != null
           ? DateTime.parse(json['proposed_date_time'] as String)
           : null,
+      source: json['source'] as String? ?? 'general',
+      requestType: json['request_type'] as String? ?? 'game_request',
+      gameId: json['game_id'] as String?,
+      gameTitle: json['game_title'] as String?,
+      playersNeeded: json['players_needed'] as int?,
+      currentPlayers: json['current_players'] as int?,
     );
   }
 
@@ -84,6 +104,12 @@ class GameRequest {
       'venue_id': venueId,
       'venue_name': venueName,
       'proposed_date_time': proposedDateTime?.toIso8601String(),
+      'source': source,
+      'request_type': requestType,
+      'game_id': gameId,
+      'game_title': gameTitle,
+      'players_needed': playersNeeded,
+      'current_players': currentPlayers,
     };
   }
 
@@ -119,6 +145,41 @@ class GameRequest {
         return 'Cancelled';
       default:
         return status;
+    }
+  }
+
+  // New computed properties for integration
+  bool get isFromFindPlayers => source == 'findplayers';
+  bool get isFromPlayNow => source == 'playnow';
+  bool get isGeneralRequest => source == 'general';
+
+  bool get isPlayerRequest => requestType == 'player_request';
+  bool get isGameJoinRequest => requestType == 'game_join';
+  bool get isDuoRequest => requestType == 'duo_request';
+
+  String get requestTypeDisplay {
+    switch (requestType) {
+      case 'player_request':
+        return 'Find Players Request';
+      case 'game_join':
+        return 'Game Join Request';
+      case 'duo_request':
+        return 'Duo Request';
+      case 'game_request':
+      default:
+        return 'Game Request';
+    }
+  }
+
+  String get sourceDisplay {
+    switch (source) {
+      case 'findplayers':
+        return 'Find Players';
+      case 'playnow':
+        return 'Play Now';
+      case 'general':
+      default:
+        return 'Game Request';
     }
   }
 }

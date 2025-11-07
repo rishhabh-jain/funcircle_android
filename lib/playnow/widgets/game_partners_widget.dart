@@ -27,8 +27,7 @@ class _GamePartnersWidgetState extends State<GamePartnersWidget> {
       final myGames = await SupaFlow.client
           .schema('playnow').from('game_participants')
           .select('game_id')
-          .eq('user_id', currentUserUid)
-          .eq('status', 'confirmed') as List;
+          .eq('user_id', currentUserUid) as List;
 
       if (myGames.isEmpty) {
         setState(() => _isLoading = false);
@@ -40,9 +39,8 @@ class _GamePartnersWidgetState extends State<GamePartnersWidget> {
       // Get other participants from those games
       final otherParticipants = await SupaFlow.client
           .schema('playnow').from('game_participants')
-          .select('user_id, users!game_participants_user_id_fkey(display_name, photo_url)')
+          .select('user_id, users!game_participants_user_id_fkey(first_name, profile_picture)')
           .inFilter('game_id', gameIds)
-          .eq('status', 'confirmed')
           .neq('user_id', currentUserUid) as List;
 
       // Count frequency
@@ -57,8 +55,8 @@ class _GamePartnersWidgetState extends State<GamePartnersWidget> {
         } else {
           partnerCounts[userId] = GamePartner(
             userId: userId,
-            displayName: userData?['display_name'] as String? ?? 'Unknown',
-            photoUrl: userData?['photo_url'] as String?,
+            displayName: userData?['first_name'] as String? ?? 'Unknown',
+            photoUrl: userData?['profile_picture'] as String?,
             gamesPlayed: 1,
           );
         }

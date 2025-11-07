@@ -20,6 +20,19 @@ class FFAppState extends ChangeNotifier {
     _safeInit(() {
       _tutorial = prefs.getBool('ff_tutorial') ?? _tutorial;
     });
+    _safeInit(() {
+      _userLatitude = prefs.getDouble('ff_userLatitude') ?? _userLatitude;
+    });
+    _safeInit(() {
+      _userLongitude = prefs.getDouble('ff_userLongitude') ?? _userLongitude;
+    });
+    _safeInit(() {
+      _locationDisplayText = prefs.getString('ff_locationDisplayText') ?? _locationDisplayText;
+    });
+    // Reconstruct LatLng from persisted lat/lng
+    if (_userLatitude != 0.0 && _userLongitude != 0.0) {
+      _userLocation = LatLng(_userLatitude, _userLongitude);
+    }
   }
 
   void update(VoidCallback callback) {
@@ -100,12 +113,21 @@ class FFAppState extends ChangeNotifier {
   double get userLatitude => _userLatitude;
   set userLatitude(double value) {
     _userLatitude = value;
+    prefs.setDouble('ff_userLatitude', value);
   }
 
   double _userLongitude = 0.0;
   double get userLongitude => _userLongitude;
   set userLongitude(double value) {
     _userLongitude = value;
+    prefs.setDouble('ff_userLongitude', value);
+  }
+
+  String _locationDisplayText = '';
+  String get locationDisplayText => _locationDisplayText;
+  set locationDisplayText(String value) {
+    _locationDisplayText = value;
+    prefs.setString('ff_locationDisplayText', value);
   }
 }
 

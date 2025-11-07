@@ -1,43 +1,31 @@
 import 'dart:math';
 import '/backend/supabase/supabase.dart';
 import '../models/offers_model.dart';
-import 'notification_service.dart';
 
 /// Service for managing offers and referrals
 class OffersService {
   static SupabaseClient get _client => SupaFlow.client;
 
-  /// Generate unique referral code for user
+  /// Generate unique referral code for user (deterministic)
   static String generateReferralCode(String userId) {
-    final random = Random();
-    final code = userId.substring(0, min(4, userId.length)).toUpperCase() +
-        random.nextInt(9999).toString().padLeft(4, '0');
-    return code;
+    // Use user ID to generate a deterministic code (always same for same user)
+    // Take first 4 chars + last 4 chars of user ID
+    final cleaned = userId.replaceAll('-', '').toUpperCase();
+    final prefix = cleaned.substring(0, min(4, cleaned.length));
+    final suffix = cleaned.substring(max(0, cleaned.length - 4));
+    return '$prefix$suffix';
   }
 
   /// Get user's referral code
   static Future<String> getUserReferralCode(String userId) async {
     try {
-      final result = await _client
-          .from('users')
-          .select('referral_code')
-          .eq('id', userId)
-          .maybeSingle();
-
-      if (result != null && result['referral_code'] != null) {
-        return result['referral_code'] as String;
-      }
-
-      // Generate and save new code
-      final code = generateReferralCode(userId);
-      await _client
-          .from('users')
-          .update({'referral_code': code})
-          .eq('id', userId);
-
-      return code;
+      // Generate deterministic code from user ID
+      // This ensures the same user always gets the same code
+      // without needing to store it in the database
+      return generateReferralCode(userId);
     } catch (e) {
       print('Error getting referral code: $e');
+      // Fallback to generating a code
       return generateReferralCode(userId);
     }
   }
@@ -48,23 +36,50 @@ class OffersService {
     required String referralCode,
   }) async {
     try {
-      // Find referrer
-      final referrerResult = await _client
-          .from('users')
-          .select('id, display_name')
+      String? referrerId;
+
+      // First, try to find the code in existing referrals
+      // (if someone has referred others before, their code will be there)
+      final existingReferral = await _client
+          .schema('playnow')
+          .from('referrals')
+          .select('referrer_id')
           .eq('referral_code', referralCode)
+          .limit(1)
           .maybeSingle();
 
-      if (referrerResult == null) {
-        return false; // Invalid code
+      if (existingReferral != null) {
+        referrerId = existingReferral['referrer_id'] as String;
+      } else {
+        // Code not found in referrals, so search users by generating codes
+        // This is less efficient but necessary for first-time referrers
+        final users = await _client
+            .from('users')
+            .select('id')
+            .limit(1000); // Reasonable limit
+
+        for (final user in users) {
+          final userId = user['id'] as String;
+          if (generateReferralCode(userId) == referralCode) {
+            referrerId = userId;
+            break;
+          }
+        }
       }
 
-      final referrerId = referrerResult['id'] as String;
+      if (referrerId == null) {
+        return false; // Invalid code - no matching user found
+      }
+
+      // Don't allow self-referral
+      if (referrerId == newUserId) {
+        return false;
+      }
 
       // Create referral record
-      await _client.from('playnow_referrals').insert({
-        'referrer_user_id': referrerId,
-        'referred_user_id': newUserId,
+      await _client.schema('playnow').from('referrals').insert({
+        'referrer_id': referrerId,
+        'referred_id': newUserId,
         'referral_code': referralCode,
         'status': 'pending',
       });
@@ -90,9 +105,10 @@ class OffersService {
   static Future<bool> completeReferral(String referredUserId) async {
     try {
       final referralResult = await _client
-          .from('playnow_referrals')
-          .select('id, referrer_user_id, status')
-          .eq('referred_user_id', referredUserId)
+          .schema('playnow')
+          .from('referrals')
+          .select('id, referrer_id, status')
+          .eq('referred_id', referredUserId)
           .eq('status', 'pending')
           .maybeSingle();
 
@@ -100,16 +116,18 @@ class OffersService {
         return false;
       }
 
-      final referrerId = referralResult['referrer_user_id'] as String;
+      final referrerId = referralResult['referrer_id'] as String;
       final referralId = referralResult['id'] as String;
 
       // Update referral status
       await _client
-          .from('playnow_referrals')
+          .schema('playnow')
+          .from('referrals')
           .update({
             'status': 'completed',
-            'completed_at': DateTime.now().toIso8601String(),
             'reward_amount': 50.0,
+            'reward_claimed': true,
+            'claimed_at': DateTime.now().toIso8601String(),
           })
           .eq('id', referralId);
 
@@ -131,11 +149,12 @@ class OffersService {
           .maybeSingle();
 
       if (referredUserData != null) {
-        await NotificationService.notifyReferralRewardEarned(
-          userId: referrerId,
-          amount: 50.0,
-          referredUserName: referredUserData['display_name'] as String? ?? 'Someone',
-        );
+        // TODO: Call notification service when integrated
+        // await NotificationsService.notifyReferralRewardEarned(
+        //   userId: referrerId,
+        //   amount: 50.0,
+        //   referredUserName: referredUserData['display_name'] as String? ?? 'Someone',
+        // );
       }
 
       return true;
@@ -168,16 +187,16 @@ class OffersService {
         'description': description,
         'discount_amount': discountAmount,
         'discount_percentage': discountPercentage,
-        'status': 'active',
         'expires_at': expiresAt?.toIso8601String(),
       });
 
       // Notify user
-      await NotificationService.notifyOfferActivated(
-        userId: userId,
-        offerTitle: title,
-        offerId: '', // Will be set by insert
-      );
+      // TODO: Call notification service when integrated
+      // await NotificationsService.notifyOfferActivated(
+      //   userId: userId,
+      //   offerTitle: title,
+      //   offerId: '', // Will be set by insert
+      // );
 
       return true;
     } catch (e) {
@@ -187,7 +206,7 @@ class OffersService {
   }
 
   /// Get user's active offers
-  static Future<List<UserOffer>> getUserOffers({
+  static Future<List<Map<String, dynamic>>> getUserOffers({
     required String userId,
     bool activeOnly = false,
   }) async {
@@ -197,28 +216,38 @@ class OffersService {
           .select()
           .eq('user_id', userId);
 
-      if (activeOnly) {
-        query = query.eq('status', 'active');
-      }
-
       final response = await query.order('created_at', ascending: false) as List;
 
-      return response
-          .map((json) => UserOffer.fromJson(json as Map<String, dynamic>))
-          .where((offer) => !activeOnly || !offer.isExpired)
-          .toList();
+      // Filter by expiration and usage if activeOnly
+      if (activeOnly) {
+        final now = DateTime.now();
+        return response
+            .cast<Map<String, dynamic>>()
+            .where((offer) {
+              // Check if already used
+              if (offer['used_at'] != null) return false;
+
+              // Check if expired
+              if (offer['expires_at'] == null) return true;
+              final expiresAt = DateTime.parse(offer['expires_at'] as String);
+              return now.isBefore(expiresAt);
+            })
+            .toList();
+      }
+
+      return response.cast<Map<String, dynamic>>();
     } catch (e) {
       print('Error getting user offers: $e');
       return [];
     }
   }
 
-  /// Use an offer
+  /// Use an offer (mark as used by setting used_at timestamp)
   static Future<bool> useOffer(String offerId) async {
     try {
       await _client
           .schema('playnow').from('user_offers')
-          .update({'status': 'used'})
+          .update({'used_at': DateTime.now().toIso8601String()})
           .eq('id', offerId);
       return true;
     } catch (e) {
@@ -231,9 +260,10 @@ class OffersService {
   static Future<Map<String, dynamic>> getReferralStats(String userId) async {
     try {
       final referrals = await _client
-          .from('playnow_referrals')
+          .schema('playnow')
+          .from('referrals')
           .select()
-          .eq('referrer_user_id', userId) as List;
+          .eq('referrer_id', userId) as List;
 
       final pending = referrals.where((r) => r['status'] == 'pending').length;
       final completed = referrals.where((r) => r['status'] == 'completed').length;

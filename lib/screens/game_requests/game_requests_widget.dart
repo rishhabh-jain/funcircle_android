@@ -1,16 +1,19 @@
 import '/backend/supabase/supabase.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/auth/firebase_auth/auth_util.dart';
-import '../../services/game_requests_service.dart';
-import '../../models/game_request.dart';
-import 'widgets/received_request_card.dart';
-import 'widgets/sent_request_card.dart';
+import '../../services/my_games_service.dart';
+import '../../models/my_game_item.dart';
+import '../../find_players_new/models/player_request_model.dart';
+import '../../find_players_new/widgets/request_info_sheet.dart';
+import '../../playnow/pages/game_details_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:ui';
 import 'game_requests_model.dart';
 export 'game_requests_model.dart';
 
+/// Screen showing ALL games and requests user is involved in
+/// Includes both FindPlayers requests and PlayNow games (paid or free)
 class GameRequestsWidget extends StatefulWidget {
   const GameRequestsWidget({super.key});
 
@@ -26,18 +29,21 @@ class _GameRequestsWidgetState extends State<GameRequestsWidget>
   late GameRequestsModel _model;
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
-  late GameRequestsService _service;
+  late MyGamesService _service;
   late TabController _tabController;
+  List<MyGameItem> _allGames = [];
+  bool _isLoading = true;
+  String? _errorMessage;
+  String _currentFilter = 'all';
 
   @override
   void initState() {
     super.initState();
     _model = createModel(context, () => GameRequestsModel());
-    _service = GameRequestsService(SupaFlow.client);
-    _tabController = TabController(length: 2, vsync: this);
+    _service = MyGamesService(SupaFlow.client);
+    _tabController = TabController(length: 4, vsync: this);
     _tabController.addListener(_onTabChanged);
-    _loadReceivedRequests();
-    _loadSentRequests();
+    _loadGames();
   }
 
   @override
@@ -50,269 +56,163 @@ class _GameRequestsWidgetState extends State<GameRequestsWidget>
 
   void _onTabChanged() {
     if (!_tabController.indexIsChanging) {
-      setState(() {});
+      final filters = ['all', 'upcoming', 'past', 'cancelled'];
+      setState(() {
+        _currentFilter = filters[_tabController.index];
+      });
+      _loadGames();
     }
   }
 
-  Future<void> _loadReceivedRequests() async {
-    if (currentUserUid.isEmpty) return;
+  Future<void> _loadGames() async {
+    if (currentUserUid.isEmpty) {
+      print('No user ID found');
+      return;
+    }
 
     setState(() {
-      _model.isLoadingReceived = true;
+      _isLoading = true;
+      _errorMessage = null;
     });
 
     try {
-      final requests = await _service.getReceivedRequests(currentUserUid);
+      print('Loading games with filter: $_currentFilter');
+      final games = await _service.getUserGames(
+        currentUserUid,
+        filter: _currentFilter,
+      );
+
+      print('Loaded ${games.length} games successfully');
       setState(() {
-        _model.receivedRequests = requests;
-        _model.isLoadingReceived = false;
+        _allGames = games;
+        _isLoading = false;
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
+      print('Error loading games: $e');
+      print('Stack trace: $stackTrace');
+
       setState(() {
-        _model.isLoadingReceived = false;
+        _isLoading = false;
+        _errorMessage = e.toString();
       });
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load received requests: $e')),
+          SnackBar(
+            content: Text('Failed to load games: $e'),
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Retry',
+              onPressed: _loadGames,
+            ),
+          ),
         );
       }
     }
   }
 
-  Future<void> _loadSentRequests() async {
-    if (currentUserUid.isEmpty) return;
-
-    setState(() {
-      _model.isLoadingSent = true;
-    });
-
-    try {
-      final requests = await _service.getSentRequests(currentUserUid);
-      setState(() {
-        _model.sentRequests = requests;
-        _model.isLoadingSent = false;
-      });
-    } catch (e) {
-      setState(() {
-        _model.isLoadingSent = false;
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load sent requests: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _handleAccept(GameRequest request) async {
-    try {
-      await _service.acceptRequest(request.requestId);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Request accepted'),
-            backgroundColor: Colors.green,
-          ),
-        );
-        _loadReceivedRequests();
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to accept request: $e')),
-        );
-      }
-    }
-  }
-
-  Future<void> _handleReject(GameRequest request) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Reject Request'),
-        content: const Text('Are you sure you want to reject this request?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Reject'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
+  void _navigateToGameDetails(MyGameItem game) async {
+    if (game.isPlayNow) {
+      // Navigate to PlayNow game details page
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => GameDetailsPage(gameId: game.id),
+        ),
+      );
+    } else {
+      // For FindPlayers, fetch full request data and show bottom sheet
       try {
-        await _service.rejectRequest(request.requestId);
+        // Fetch complete request data from database
+        final requestData = await SupaFlow.client
+            .schema('findplayers')
+            .from('player_requests')
+            .select('''
+              *,
+              users!player_requests_user_id_fkey(
+                user_id,
+                first_name,
+                profile_picture,
+                skill_level_badminton,
+                skill_level_pickleball
+              )
+            ''')
+            .eq('id', game.id)
+            .maybeSingle();
+
+        if (requestData == null) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Request not found'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+
+        // Transform to PlayerRequestModel
+        final userData = requestData['users'];
+
+        // Get user skill level based on sport type
+        int? userSkillLevel;
+        if (userData != null) {
+          if (game.sportType.toLowerCase() == 'badminton') {
+            userSkillLevel = userData['skill_level_badminton'] as int?;
+          } else {
+            userSkillLevel = userData['skill_level_pickleball'] as int?;
+          }
+        }
+
+        final request = PlayerRequestModel(
+          id: requestData['id'] as String,
+          userId: requestData['user_id'] as String,
+          sportType: requestData['sport_type'] as String,
+          venueId: requestData['venue_id'] as int?,
+          customLocation: requestData['custom_location'] as String?,
+          latitude: requestData['latitude'] != null
+              ? (requestData['latitude'] as num).toDouble()
+              : null,
+          longitude: requestData['longitude'] != null
+              ? (requestData['longitude'] as num).toDouble()
+              : null,
+          playersNeeded: requestData['players_needed'] as int,
+          scheduledTime: DateTime.parse(requestData['scheduled_time'] as String),
+          skillLevel: requestData['skill_level'] as int?,
+          description: requestData['description'] as String?,
+          status: requestData['status'] as String,
+          createdAt: DateTime.parse(requestData['created_at'] as String),
+          expiresAt: DateTime.parse(requestData['expires_at'] as String),
+          userName: userData?['first_name'] as String?,
+          userProfilePicture: userData?['profile_picture'] as String?,
+          userSkillLevel: userSkillLevel,
+        );
+
+        // Show request info sheet
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Request rejected')),
+          showModalBottomSheet(
+            context: context,
+            isScrollControlled: true,
+            backgroundColor: Colors.transparent,
+            builder: (context) => RequestInfoSheet(
+              request: request,
+              currentUserId: currentUserUid,
+            ),
           );
-          _loadReceivedRequests();
         }
       } catch (e) {
+        print('Error fetching request details: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to reject request: $e')),
+            SnackBar(
+              content: Text('Failed to load request: $e'),
+              backgroundColor: Colors.red,
+            ),
           );
         }
       }
     }
-  }
-
-  Future<void> _handleCancel(GameRequest request) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cancel Request'),
-        content: const Text('Are you sure you want to cancel this request?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('No'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Yes'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      try {
-        await _service.cancelRequest(request.requestId);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Request cancelled')),
-          );
-          _loadSentRequests();
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Failed to cancel request: $e')),
-          );
-        }
-      }
-    }
-  }
-
-  void _showMockReceivedRequests() {
-    setState(() {
-      _model.receivedRequests = [
-        GameRequest(
-          requestId: 'mock-1',
-          senderId: 'user-1',
-          senderName: 'Rahul Sharma',
-          senderImage: 'https://i.pravatar.cc/150?img=12',
-          senderLevel: '4',
-          receiverId: currentUserUid,
-          receiverName: 'You',
-          sportType: 'Badminton',
-          message: 'Hey! Want to play doubles tomorrow morning? I know a great court nearby.',
-          status: 'pending',
-          requestedAt: DateTime.now().subtract(const Duration(hours: 2)),
-          venueName: 'Ace Badminton Academy',
-        ),
-        GameRequest(
-          requestId: 'mock-2',
-          senderId: 'user-2',
-          senderName: 'Priya Singh',
-          senderImage: 'https://i.pravatar.cc/150?img=47',
-          senderLevel: '3',
-          receiverId: currentUserUid,
-          receiverName: 'You',
-          sportType: 'Pickleball',
-          message: 'Looking for a mixed doubles partner for this weekend. Are you available?',
-          status: 'pending',
-          requestedAt: DateTime.now().subtract(const Duration(hours: 5)),
-          venueName: 'Sports Hub Center',
-        ),
-        GameRequest(
-          requestId: 'mock-3',
-          senderId: 'user-3',
-          senderName: 'Amit Kumar',
-          senderImage: 'https://i.pravatar.cc/150?img=33',
-          senderLevel: '5',
-          receiverId: currentUserUid,
-          receiverName: 'You',
-          sportType: 'Badminton',
-          message: null,
-          status: 'accepted',
-          requestedAt: DateTime.now().subtract(const Duration(days: 1)),
-          respondedAt: DateTime.now().subtract(const Duration(hours: 20)),
-          venueName: 'Phoenix Sports Complex',
-        ),
-        GameRequest(
-          requestId: 'mock-4',
-          senderId: 'user-4',
-          senderName: 'Sneha Patel',
-          senderImage: 'https://i.pravatar.cc/150?img=25',
-          senderLevel: '2',
-          receiverId: currentUserUid,
-          receiverName: 'You',
-          sportType: 'Badminton',
-          message: 'Hi! I saw your profile and I think we would be a good match for singles.',
-          status: 'rejected',
-          requestedAt: DateTime.now().subtract(const Duration(days: 2)),
-          respondedAt: DateTime.now().subtract(const Duration(days: 1, hours: 18)),
-        ),
-      ];
-    });
-  }
-
-  void _showMockSentRequests() {
-    setState(() {
-      _model.sentRequests = [
-        GameRequest(
-          requestId: 'mock-sent-1',
-          senderId: currentUserUid,
-          senderName: 'You',
-          receiverId: 'user-5',
-          receiverName: 'Arjun Mehta',
-          receiverImage: 'https://i.pravatar.cc/150?img=68',
-          receiverLevel: '4',
-          sportType: 'Badminton',
-          message: 'Hey! Would love to play a match with you this Friday evening.',
-          status: 'pending',
-          requestedAt: DateTime.now().subtract(const Duration(hours: 3)),
-          venueName: 'Elite Sports Arena',
-        ),
-        GameRequest(
-          requestId: 'mock-sent-2',
-          senderId: currentUserUid,
-          senderName: 'You',
-          receiverId: 'user-6',
-          receiverName: 'Kavya Reddy',
-          receiverImage: 'https://i.pravatar.cc/150?img=44',
-          receiverLevel: '3',
-          sportType: 'Pickleball',
-          message: 'Interested in playing a casual game this weekend?',
-          status: 'accepted',
-          requestedAt: DateTime.now().subtract(const Duration(hours: 12)),
-          respondedAt: DateTime.now().subtract(const Duration(hours: 8)),
-          venueName: 'City Sports Club',
-        ),
-        GameRequest(
-          requestId: 'mock-sent-3',
-          senderId: currentUserUid,
-          senderName: 'You',
-          receiverId: 'user-7',
-          receiverName: 'Rohan Verma',
-          receiverImage: 'https://i.pravatar.cc/150?img=15',
-          receiverLevel: '5',
-          sportType: 'Badminton',
-          message: null,
-          status: 'cancelled',
-          requestedAt: DateTime.now().subtract(const Duration(days: 1)),
-          respondedAt: DateTime.now().subtract(const Duration(hours: 18)),
-        ),
-      ];
-    });
   }
 
   @override
@@ -347,15 +247,28 @@ class _GameRequestsWidgetState extends State<GameRequestsWidget>
 
                   // Content
                   Expanded(
-                    child: TabBarView(
-                      controller: _tabController,
-                      children: [
-                        // Received Tab
-                        _buildReceivedTab(),
-                        // Sent Tab
-                        _buildSentTab(),
-                      ],
-                    ),
+                    child: _isLoading
+                        ? Center(
+                            child: CircularProgressIndicator(
+                              color: Colors.orange,
+                            ),
+                          )
+                        : _errorMessage != null
+                            ? _buildErrorState()
+                            : _allGames.isEmpty
+                                ? _buildEmptyState()
+                                : RefreshIndicator(
+                                    onRefresh: _loadGames,
+                                    color: Colors.orange,
+                                    child: ListView.builder(
+                                      padding: const EdgeInsets.all(20),
+                                      itemCount: _allGames.length,
+                                      itemBuilder: (context, index) {
+                                        final game = _allGames[index];
+                                        return _buildGameCard(game);
+                                      },
+                                    ),
+                                  ),
                   ),
                 ],
               ),
@@ -384,7 +297,7 @@ class _GameRequestsWidgetState extends State<GameRequestsWidget>
           const SizedBox(width: 8),
           // Title
           const Text(
-            'Game Requests',
+            'My Games',
             style: TextStyle(
               color: Colors.white,
               fontSize: 24,
@@ -434,20 +347,22 @@ class _GameRequestsWidgetState extends State<GameRequestsWidget>
               indicatorSize: TabBarIndicatorSize.tab,
               indicatorPadding: const EdgeInsets.all(5),
               dividerColor: Colors.transparent,
-              labelPadding: const EdgeInsets.symmetric(horizontal: 12),
+              labelPadding: const EdgeInsets.symmetric(horizontal: 4),
               labelStyle: const TextStyle(
-                fontSize: 14,
+                fontSize: 12,
                 fontWeight: FontWeight.w700,
                 letterSpacing: 0.2,
               ),
               unselectedLabelStyle: const TextStyle(
-                fontSize: 13,
+                fontSize: 11,
                 fontWeight: FontWeight.w600,
                 letterSpacing: 0.1,
               ),
               tabs: const [
-                Tab(text: 'Received'),
-                Tab(text: 'Sent'),
+                Tab(text: 'All'),
+                Tab(text: 'Upcoming'),
+                Tab(text: 'Past'),
+                Tab(text: 'Cancelled'),
               ],
             ),
           ),
@@ -456,125 +371,299 @@ class _GameRequestsWidgetState extends State<GameRequestsWidget>
     );
   }
 
-  Widget _buildReceivedTab() {
-    if (_model.isLoadingReceived) {
-      return const Center(
-        child: CircularProgressIndicator(
-          color: Colors.orange,
-        ),
-      );
+  Widget _buildGameCard(MyGameItem game) {
+    final dateFormat = DateFormat('MMM dd, yyyy');
+    final timeFormat = DateFormat('h:mm a');
+
+    // Sport color
+    Color sportColor = game.sportType.toLowerCase() == 'badminton'
+        ? const Color(0xFF4CAF50)
+        : const Color(0xFF2196F3);
+
+    // Status color
+    Color statusColor;
+    switch (game.statusColor) {
+      case 'green':
+        statusColor = Colors.green;
+        break;
+      case 'blue':
+        statusColor = Colors.blue;
+        break;
+      case 'orange':
+        statusColor = Colors.orange;
+        break;
+      case 'red':
+        statusColor = Colors.red;
+        break;
+      default:
+        statusColor = Colors.grey;
     }
 
-    if (_model.receivedRequests.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(32),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.orange.withValues(alpha: 0.2),
-                    Colors.orange.withValues(alpha: 0.05),
-                  ],
-                ),
-              ),
-              child: Icon(
-                Icons.inbox_outlined,
-                size: 80,
-                color: Colors.orange.withValues(alpha: 0.8),
-              ),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'No received requests',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 20,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Game requests from other players will appear here',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.6),
-                fontSize: 14,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            // Preview button
-            GestureDetector(
-              onTap: _showMockReceivedRequests,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFFF6B35), Color(0xFFF7931E)],
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.orange.withValues(alpha: 0.4),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.visibility, color: Colors.white, size: 18),
-                    SizedBox(width: 8),
-                    Text(
-                      'Preview UI Design',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
+    return GestureDetector(
+      onTap: () => _navigateToGameDetails(game),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Colors.white.withValues(alpha: 0.1),
+              Colors.white.withValues(alpha: 0.05),
+            ],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.15),
+            width: 1,
+          ),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(16),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header row with sport, source, and status
+                  Row(
+                    children: [
+                      // Sport badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: sportColor.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: sportColor.withValues(alpha: 0.5),
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          game.sportType,
+                          style: TextStyle(
+                            color: sportColor,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
+                      const SizedBox(width: 8),
+                      // Source badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: game.isFindPlayers
+                              ? Colors.purple.withValues(alpha: 0.2)
+                              : Colors.blue.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          game.isFindPlayers ? 'Find Players' : 'Play Now',
+                          style: TextStyle(
+                            color: game.isFindPlayers
+                                ? Colors.purple.shade300
+                                : Colors.blue.shade300,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                      const Spacer(),
+                      // Status badge
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: statusColor.withValues(alpha: 0.5),
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          game.statusDisplay,
+                          style: TextStyle(
+                            color: statusColor,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Title
+                  Text(
+                    game.title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
                     ),
-                  ],
-                ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 12),
+                  // Venue info
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.location_on_outlined,
+                        color: Colors.white.withValues(alpha: 0.6),
+                        size: 16,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          game.venueName,
+                          style: TextStyle(
+                            color: Colors.white.withValues(alpha: 0.8),
+                            fontSize: 13,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  // Date and time
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.calendar_today_outlined,
+                        color: Colors.white.withValues(alpha: 0.6),
+                        size: 16,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        dateFormat.format(game.scheduledDateTime),
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.8),
+                          fontSize: 13,
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Icon(
+                        Icons.access_time_outlined,
+                        color: Colors.white.withValues(alpha: 0.6),
+                        size: 16,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        timeFormat.format(game.scheduledDateTime),
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.8),
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  // Bottom row with players and payment
+                  Row(
+                    children: [
+                      // Players count
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.people_outline,
+                              color: Colors.white.withValues(alpha: 0.8),
+                              size: 16,
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              game.playersDisplay,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.8),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Spacer(),
+                      // Payment badge
+                      if (game.isPaid)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFFFF6B35), Color(0xFFF7931E)],
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.currency_rupee,
+                                color: Colors.white,
+                                size: 14,
+                              ),
+                              Text(
+                                game.paymentAmount.toStringAsFixed(0),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '• ${game.paymentBadge}',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.green.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Colors.green.withValues(alpha: 0.5),
+                              width: 1,
+                            ),
+                          ),
+                          child: const Text(
+                            'Free',
+                            style: TextStyle(
+                              color: Colors.green,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
               ),
             ),
-          ],
+          ),
         ),
-      );
-    }
-
-    return RefreshIndicator(
-      onRefresh: _loadReceivedRequests,
-      color: Colors.orange,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _model.receivedRequests.length,
-        itemBuilder: (context, index) {
-          final request = _model.receivedRequests[index];
-          return ReceivedRequestCard(
-            request: request,
-            onAccept: () => _handleAccept(request),
-            onReject: () => _handleReject(request),
-          );
-        },
       ),
     );
   }
 
-  Widget _buildSentTab() {
-    if (_model.isLoadingSent) {
-      return const Center(
-        child: CircularProgressIndicator(
-          color: Colors.orange,
-        ),
-      );
-    }
-
-    if (_model.sentRequests.isEmpty) {
-      return Center(
+  Widget _buildErrorState() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -584,89 +673,128 @@ class _GameRequestsWidgetState extends State<GameRequestsWidget>
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
                   colors: [
-                    Colors.orange.withValues(alpha: 0.2),
-                    Colors.orange.withValues(alpha: 0.05),
+                    Colors.red.withValues(alpha: 0.2),
+                    Colors.red.withValues(alpha: 0.05),
                   ],
                 ),
               ),
               child: Icon(
-                Icons.send_outlined,
+                Icons.error_outline,
                 size: 80,
-                color: Colors.orange.withValues(alpha: 0.8),
+                color: Colors.red.withValues(alpha: 0.8),
               ),
             ),
             const SizedBox(height: 24),
             const Text(
-              'No sent requests',
+              'Error Loading Games',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 20,
                 fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              'Send game requests to play with other players',
-              style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.6),
-                fontSize: 14,
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: Colors.red.withValues(alpha: 0.3),
+                ),
               ),
-              textAlign: TextAlign.center,
+              child: SingleChildScrollView(
+                child: SelectableText(
+                  _errorMessage ?? 'Unknown error',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.8),
+                    fontSize: 12,
+                    fontFamily: 'monospace',
+                  ),
+                  textAlign: TextAlign.left,
+                ),
+              ),
             ),
             const SizedBox(height: 24),
-            // Preview button
-            GestureDetector(
-              onTap: _showMockSentRequests,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFFFF6B35), Color(0xFFF7931E)],
-                  ),
+            ElevatedButton(
+              onPressed: _loadGames,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.orange.withValues(alpha: 0.4),
-                      blurRadius: 12,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.visibility, color: Colors.white, size: 18),
-                    SizedBox(width: 8),
-                    Text(
-                      'Preview UI Design',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
                 ),
               ),
+              child: const Text('Retry'),
             ),
           ],
         ),
-      );
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    String message;
+    IconData icon;
+
+    switch (_currentFilter) {
+      case 'upcoming':
+        message = 'No upcoming games';
+        icon = Icons.event_available;
+        break;
+      case 'past':
+        message = 'No past games';
+        icon = Icons.history;
+        break;
+      case 'cancelled':
+        message = 'No cancelled games';
+        icon = Icons.cancel;
+        break;
+      default:
+        message = 'No games yet';
+        icon = Icons.sports_tennis;
     }
 
-    return RefreshIndicator(
-      onRefresh: _loadSentRequests,
-      color: Colors.orange,
-      child: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: _model.sentRequests.length,
-        itemBuilder: (context, index) {
-          final request = _model.sentRequests[index];
-          return SentRequestCard(
-            request: request,
-            onCancel: () => _handleCancel(request),
-          );
-        },
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [
+                  Colors.orange.withValues(alpha: 0.2),
+                  Colors.orange.withValues(alpha: 0.05),
+                ],
+              ),
+            ),
+            child: Icon(
+              icon,
+              size: 80,
+              color: Colors.orange.withValues(alpha: 0.8),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Text(
+            message,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Create or join a game to get started',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.6),
+              fontSize: 14,
+            ),
+          ),
+        ],
       ),
     );
   }

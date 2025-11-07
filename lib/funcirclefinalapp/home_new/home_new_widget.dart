@@ -2,7 +2,10 @@ import '/backend/supabase/supabase.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/custom_code/actions/index.dart' as actions;
+import '/auth/firebase_auth/auth_util.dart';
+import '/services/notifications_service.dart';
 import '/index.dart';
+import '/main.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -26,6 +29,7 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
     with SingleTickerProviderStateMixin {
   late HomeNewModel _model;
   late TabController _sportTabController;
+  late NotificationsService _notificationsService;
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
@@ -35,11 +39,27 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
     _model = createModel(context, () => HomeNewModel());
     _sportTabController = TabController(length: 2, vsync: this);
     _sportTabController.addListener(_onSportTabChanged);
+    _notificationsService = NotificationsService(SupaFlow.client);
 
     WidgetsBinding.instance.addPostFrameCallback((_) => safeSetState(() {}));
 
     // Get user's current location on initialization
     _fetchUserLocation();
+    // Fetch unread notifications count
+    _fetchUnreadNotificationsCount();
+  }
+
+  Future<void> _fetchUnreadNotificationsCount() async {
+    if (currentUserUid.isEmpty) return;
+
+    try {
+      final count = await _notificationsService.getUnreadCount(currentUserUid);
+      safeSetState(() {
+        _model.unreadNotificationsCount = count;
+      });
+    } catch (e) {
+      print('Error fetching unread notifications count: $e');
+    }
   }
 
   void _onSportTabChanged() {
@@ -65,6 +85,17 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
   }
 
   Future<void> _fetchUserLocation() async {
+    // First check if we have a persisted location
+    if (FFAppState().locationDisplayText.isNotEmpty &&
+        FFAppState().userLocation != null) {
+      safeSetState(() {
+        _model.userLocation = FFAppState().userLocation;
+        _model.locationDisplayText = FFAppState().locationDisplayText;
+        _model.isLoadingLocation = false;
+      });
+      return;
+    }
+
     safeSetState(() {
       _model.isLoadingLocation = true;
     });
@@ -83,6 +114,7 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
           FFAppState().userLocation = location;
           FFAppState().userLatitude = location.latitude;
           FFAppState().userLongitude = location.longitude;
+          FFAppState().locationDisplayText = 'Current Location';
         });
       } else {
         safeSetState(() {
@@ -224,6 +256,7 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
             FFAppState().userLocation = latLng;
             FFAppState().userLatitude = latLng.latitude;
             FFAppState().userLongitude = latLng.longitude;
+            FFAppState().locationDisplayText = description;
           });
         },
       ),
@@ -632,44 +665,86 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
 
                                 // Notifications button
                                 InkWell(
-                                  onTap: () {
+                                  onTap: () async {
                                     logFirebaseEvent(
                                         'Notifications_navigate_to');
-                                    context.pushNamed('NotificationsScreen');
+                                    await context.pushNamed(
+                                        NotificationsScreenWidget.routeName);
+                                    // Refresh unread count when returning from notifications screen
+                                    _fetchUnreadNotificationsCount();
                                   },
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(50),
-                                    child: BackdropFilter(
-                                      filter: ImageFilter.blur(
-                                          sigmaX: 10, sigmaY: 10),
-                                      child: Container(
-                                        width: 44,
-                                        height: 44,
-                                        decoration: BoxDecoration(
-                                          gradient: LinearGradient(
-                                            colors: [
-                                              Colors.white
-                                                  .withValues(alpha: 0.15),
-                                              Colors.white
-                                                  .withValues(alpha: 0.08),
-                                            ],
-                                            begin: Alignment.topLeft,
-                                            end: Alignment.bottomRight,
+                                  child: Stack(
+                                    children: [
+                                      ClipRRect(
+                                        borderRadius: BorderRadius.circular(50),
+                                        child: BackdropFilter(
+                                          filter: ImageFilter.blur(
+                                              sigmaX: 10, sigmaY: 10),
+                                          child: Container(
+                                            width: 44,
+                                            height: 44,
+                                            decoration: BoxDecoration(
+                                              gradient: LinearGradient(
+                                                colors: [
+                                                  Colors.white
+                                                      .withValues(alpha: 0.15),
+                                                  Colors.white
+                                                      .withValues(alpha: 0.08),
+                                                ],
+                                                begin: Alignment.topLeft,
+                                                end: Alignment.bottomRight,
+                                              ),
+                                              shape: BoxShape.circle,
+                                              border: Border.all(
+                                                color: Colors.white
+                                                    .withValues(alpha: 0.2),
+                                                width: 1,
+                                              ),
+                                            ),
+                                            child: Icon(
+                                              Icons.notifications_outlined,
+                                              color: Colors.white,
+                                              size: 22.0,
+                                            ),
                                           ),
-                                          shape: BoxShape.circle,
-                                          border: Border.all(
-                                            color: Colors.white
-                                                .withValues(alpha: 0.2),
-                                            width: 1,
-                                          ),
-                                        ),
-                                        child: Icon(
-                                          Icons.notifications_outlined,
-                                          color: Colors.white,
-                                          size: 22.0,
                                         ),
                                       ),
-                                    ),
+                                      // Unread badge
+                                      if (_model.unreadNotificationsCount > 0)
+                                        Positioned(
+                                          right: 0,
+                                          top: 0,
+                                          child: Container(
+                                            padding: EdgeInsets.all(
+                                                _model.unreadNotificationsCount > 9
+                                                    ? 4
+                                                    : 6),
+                                            decoration: BoxDecoration(
+                                              color: Color(0xFFFF6584),
+                                              shape: BoxShape.circle,
+                                              border: Border.all(
+                                                color: Color(0xFF121212),
+                                                width: 2,
+                                              ),
+                                            ),
+                                            constraints: BoxConstraints(
+                                              minWidth: 20,
+                                              minHeight: 20,
+                                            ),
+                                            child: Text(
+                                              _model.unreadNotificationsCount > 99
+                                                  ? '99+'
+                                                  : '${_model.unreadNotificationsCount}',
+                                              style: TextStyle(
+                                                color: Colors.white,
+                                                fontSize: 10,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
                                   ),
                                 ),
 
@@ -1043,7 +1118,16 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                                 highlightColor: Colors.transparent,
                                 onTap: () async {
                                   logFirebaseEvent('Container_navigate_to');
-                                  context.pushNamed(VenuesNewWidget.routeName);
+                                  print('🔍 Explore Venues button tapped!');
+                                  // Navigate to VenueBooking tab in main navigation
+                                  final navBarState = context.findAncestorStateOfType<NavBarPageState>();
+                                  print('🔍 Found navBarState: ${navBarState != null}');
+                                  if (navBarState != null) {
+                                    print('🔍 Switching to venuesNew tab');
+                                    navBarState.switchToTab('venuesNew');
+                                  } else {
+                                    print('❌ NavBarPageState not found in widget tree');
+                                  }
                                 },
                                 child: Container(
                                   height: 140.0,
@@ -1316,17 +1400,17 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                         ),
                       ),
 
-                      // My Groups and My Bookings Cards - Same Height
+                      // Game Requests and My Bookings Cards - Same Height
                       const SizedBox(height: 12),
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16.0),
                         child: Row(
                           children: [
-                            // My Groups Card
+                            // Game Requests Card
                             Expanded(
                               child: InkWell(
                                 onTap: () {
-                                  context.pushNamed(ChatsnewWidget.routeName);
+                                  context.pushNamed('GameRequestsScreen');
                                 },
                                 child: ClipRRect(
                                   borderRadius: BorderRadius.circular(16),
@@ -1357,7 +1441,7 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                                       child: Row(
                                         children: [
                                           Icon(
-                                            Icons.groups_outlined,
+                                            Icons.sports_tennis,
                                             color: const Color(0xFFFF6B35),
                                             size: 24,
                                           ),
@@ -1370,7 +1454,7 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                                                   MainAxisAlignment.center,
                                               children: [
                                                 const Text(
-                                                  'My Groups',
+                                                  'My Games',
                                                   style: TextStyle(
                                                     color: Colors.white,
                                                     fontSize: 14,
@@ -1382,7 +1466,7 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                                                 ),
                                                 const SizedBox(height: 2),
                                                 Text(
-                                                  'View your groups',
+                                                  'View all requests',
                                                   style: TextStyle(
                                                     color: Colors.white
                                                         .withValues(alpha: 0.5),

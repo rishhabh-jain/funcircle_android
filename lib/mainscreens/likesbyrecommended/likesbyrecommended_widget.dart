@@ -140,7 +140,7 @@ class _LikesbyrecommendedWidgetState extends State<LikesbyrecommendedWidget> {
                       onTap: () async {
                         logFirebaseEvent('Icon_navigate_to');
 
-                        context.pushNamed(NotificationsWidget.routeName);
+                        context.pushNamed(NotificationsScreenWidget.routeName);
                       },
                       child: Icon(
                         FFIcons.kbell,

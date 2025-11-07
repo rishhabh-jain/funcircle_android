@@ -9,6 +9,7 @@ class VenueMarkerModel {
   final double longitude;
   final List<String>? images;
   final String? description;
+  final String? sportType; // 'badminton', 'pickleball', or 'both'
 
   VenueMarkerModel({
     required this.id,
@@ -18,6 +19,7 @@ class VenueMarkerModel {
     required this.longitude,
     this.images,
     this.description,
+    this.sportType,
   });
 
   /// Create from JSON map (from Supabase query)
@@ -32,6 +34,7 @@ class VenueMarkerModel {
           ? List<String>.from(json['images'] as List)
           : null,
       description: json['description'] as String?,
+      sportType: json['sport_type'] as String?,
     );
   }
 

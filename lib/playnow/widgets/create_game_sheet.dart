@@ -5,15 +5,19 @@ import '/flutter_flow/flutter_flow_widgets.dart';
 import '/auth/firebase_auth/auth_util.dart';
 import '../models/game_model.dart';
 import '../services/game_service.dart';
+import '/find_players_new/services/map_service.dart';
+import '/find_players_new/models/venue_marker_model.dart';
 
 /// Bottom sheet for creating a new game
 class CreateGameSheet extends StatefulWidget {
   final String? initialSportType;
+  final int? initialVenueId;
   final void Function()? onGameCreated;
 
   const CreateGameSheet({
     super.key,
     this.initialSportType,
+    this.initialVenueId,
     this.onGameCreated,
   });
 
@@ -24,6 +28,7 @@ class CreateGameSheet extends StatefulWidget {
 class _CreateGameSheetState extends State<CreateGameSheet> {
   final _formKey = GlobalKey<FormState>();
   bool _isCreating = false;
+  bool _isLoadingVenues = false;
 
   // Form fields
   String _sportType = 'badminton';
@@ -42,12 +47,54 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
   int? _venueId;
   String? _customLocation;
 
+  // Venues
+  List<VenueMarkerModel> _allVenues = [];
+  VenueMarkerModel? _selectedVenue;
+
   @override
   void initState() {
     super.initState();
     if (widget.initialSportType != null) {
       _sportType = widget.initialSportType!;
     }
+    if (widget.initialVenueId != null) {
+      _venueId = widget.initialVenueId;
+    }
+    _loadVenues();
+  }
+
+  Future<void> _loadVenues() async {
+    setState(() => _isLoadingVenues = true);
+    try {
+      final venues = await MapService.getVenues();
+      if (mounted) {
+        setState(() {
+          _allVenues = venues;
+          _isLoadingVenues = false;
+
+          // If initialVenueId was provided, select that venue
+          if (widget.initialVenueId != null) {
+            _selectedVenue = _allVenues.firstWhere(
+              (v) => v.id == widget.initialVenueId,
+              orElse: () => _allVenues.first,
+            );
+            _venueId = _selectedVenue?.id;
+          }
+        });
+      }
+    } catch (e) {
+      print('Error loading venues: $e');
+      if (mounted) {
+        setState(() => _isLoadingVenues = false);
+      }
+    }
+  }
+
+  List<VenueMarkerModel> get _filteredVenues {
+    return _allVenues.where((venue) {
+      if (venue.sportType == null) return true;
+      return venue.sportType == _sportType || venue.sportType == 'both';
+    }).toList();
   }
 
   @override
@@ -303,6 +350,130 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
               ),
               const SizedBox(height: 20),
 
+              // Location (venue selector with auto-population)
+              _buildSectionTitle('Location'),
+              if (_isLoadingVenues)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: CircularProgressIndicator(),
+                  ),
+                )
+              else
+                DropdownButtonFormField<int>(
+                  isExpanded: true,
+                  decoration: InputDecoration(
+                    labelText: 'Select Venue',
+                    hintText: 'Choose a venue',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(Icons.location_on),
+                  ),
+                  items: [
+                    const DropdownMenuItem<int>(
+                      value: null,
+                      child: Text('Custom Location'),
+                    ),
+                    ..._filteredVenues.map((venue) {
+                      return DropdownMenuItem<int>(
+                        value: venue.id,
+                        child: Text(
+                          venue.name,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _venueId = value;
+                      if (value != null) {
+                        // Find the selected venue
+                        _selectedVenue = _filteredVenues.firstWhere(
+                          (v) => v.id == value,
+                        );
+                        // Clear custom location when venue is selected
+                        _customLocation = null;
+                      } else {
+                        _selectedVenue = null;
+                        _customLocation = null;
+                      }
+                    });
+                  },
+                ),
+              // Custom location field (only shown if no venue selected)
+              if (_venueId == null) ...[
+                const SizedBox(height: 12),
+                TextFormField(
+                  decoration: InputDecoration(
+                    labelText: 'Custom Location',
+                    hintText: 'Enter custom location',
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    prefixIcon: const Icon(Icons.edit_location),
+                  ),
+                  onChanged: (value) => _customLocation = value,
+                  initialValue: _customLocation,
+                ),
+              ] else if (_selectedVenue != null) ...[
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.1),
+                    border:
+                        Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.check_circle, color: Colors.green, size: 20),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _selectedVenue!.name,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 14,
+                              ),
+                            ),
+                            if (_selectedVenue!.address != null)
+                              Text(
+                                _selectedVenue!.address!,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey[700],
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 20),
+
+              // Description
+              _buildSectionTitle('Description (Optional)'),
+              TextFormField(
+                decoration: InputDecoration(
+                  labelText: 'Description',
+                  hintText: 'Add any additional details...',
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                maxLines: 3,
+                onChanged: (value) => _description = value,
+              ),
+              const SizedBox(height: 20),
+
               // Advanced Options - Collapsible
               ExpansionTile(
                 title: Text(
@@ -314,11 +485,11 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
                 ),
                 initiallyExpanded: false,
                 children: [
-                  // Options
                   CheckboxListTile(
                     title: const Text('Venue Booked'),
                     value: _isVenueBooked,
-                    onChanged: (value) => setState(() => _isVenueBooked = value!),
+                    onChanged: (value) =>
+                        setState(() => _isVenueBooked = value!),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16),
                   ),
                   CheckboxListTile(
@@ -332,43 +503,6 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
                     value: _isMixedOnly,
                     onChanged: (value) => setState(() => _isMixedOnly = value!),
                     contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                  ),
-
-                  // Location
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildSectionTitle('Location'),
-                        TextFormField(
-                          decoration: InputDecoration(
-                            labelText: 'Location',
-                            hintText: 'Enter venue or custom location',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            prefixIcon: const Icon(Icons.location_on),
-                          ),
-                          onChanged: (value) => _customLocation = value,
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Description
-                        _buildSectionTitle('Description (Optional)'),
-                        TextFormField(
-                          decoration: InputDecoration(
-                            labelText: 'Description',
-                            hintText: 'Add any additional details...',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          maxLines: 3,
-                          onChanged: (value) => _description = value,
-                        ),
-                      ],
-                    ),
                   ),
                 ],
               ),
@@ -562,6 +696,35 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
       initialTime: _startTime,
     );
     if (picked != null) {
+      // Check if selected time is in the past for today's date
+      final now = DateTime.now();
+      final isToday = _gameDate.year == now.year &&
+          _gameDate.month == now.month &&
+          _gameDate.day == now.day;
+
+      if (isToday) {
+        final selectedDateTime = DateTime(
+          now.year,
+          now.month,
+          now.day,
+          picked.hour,
+          picked.minute,
+        );
+
+        if (selectedDateTime.isBefore(now)) {
+          // Show error for past time
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Cannot select a time in the past'),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+          return;
+        }
+      }
+
       setState(() => _startTime = picked);
     }
   }
@@ -575,7 +738,8 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
       userId: currentUserUid,
       sportType: _sportType,
       gameDate: _gameDate,
-      startTime: '${_startTime.hour.toString().padLeft(2, '0')}:${_startTime.minute.toString().padLeft(2, '0')}',
+      startTime:
+          '${_startTime.hour.toString().padLeft(2, '0')}:${_startTime.minute.toString().padLeft(2, '0')}',
       venueId: _venueId,
       customLocation: _customLocation,
       playersNeeded: _playersNeeded,
@@ -616,7 +780,8 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
           // Don't close the sheet so user can see their data
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Failed to create game. Check console for details.'),
+              content:
+                  Text('Failed to create game. Check console for details.'),
               backgroundColor: Colors.red,
               duration: Duration(seconds: 5),
             ),

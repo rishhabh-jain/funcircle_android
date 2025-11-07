@@ -43,4 +43,26 @@ class VenuesRow extends SupabaseDataRow {
 
   int? get groupId => getField<int>('group_id');
   set groupId(int? value) => setField<int>('group_id', value);
+
+  String? get sportType => getField<String>('sport_type');
+  set sportType(String? value) => setField<String>('sport_type', value);
+
+  String? get city => getField<String>('city');
+  set city(String? value) => setField<String>('city', value);
+
+  String? get state => getField<String>('state');
+  set state(String? value) => setField<String>('state', value);
+
+  List<String> get amenities => getListField<String>('amenities');
+  set amenities(List<String>? value) =>
+      setListField<String>('amenities', value);
+
+  int? get courtCount => getField<int>('court_count');
+  set courtCount(int? value) => setField<int>('court_count', value);
+
+  double? get pricePerHour => getField<double>('price_per_hour');
+  set pricePerHour(double? value) => setField<double>('price_per_hour', value);
+
+  bool? get isFeatured => getField<bool>('is_featured');
+  set isFeatured(bool? value) => setField<bool>('is_featured', value);
 }

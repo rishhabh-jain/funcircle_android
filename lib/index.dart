@@ -1,5 +1,4 @@
 // Export pages
-export '/pages/onboarding/onboarding_widget.dart' show OnboardingWidget;
 export '/sidescreens/others_profile/others_profile_widget.dart'
     show OthersProfileWidget;
 export '/sidescreens/edit_profile/edit_profile_widget.dart'
@@ -20,9 +19,14 @@ export '/sidescreens/create_group/create_group_widget.dart'
 export '/sidescreens/complete_profile_page/complete_profile_page_widget.dart'
     show CompleteProfilePageWidget;
 export '/profilequestions1/name/name_widget.dart' show NameWidget;
-export '/verification/signup_new/signup_new_widget.dart' show SignupNewWidget;
-export '/verification/otp_verification/otp_verification_widget.dart'
-    show OtpVerificationWidget;
+// New Auth Screens
+export '/auth_screens/welcome_screen.dart' show WelcomeScreen;
+export '/auth_screens/phone_auth_screen.dart' show PhoneAuthScreen;
+export '/auth_screens/otp_verification_screen.dart' show OtpVerificationScreen;
+
+// Profile Setup Screens
+export '/profile_setup/basic_info_screen.dart' show BasicInfoScreen;
+export '/profile_setup/sports_selection_screen.dart' show SportsSelectionScreen;
 export '/profilequestions1/add_images/add_images_widget.dart'
     show AddImagesWidget;
 export '/profilequestions1/drink/drink_widget.dart' show DrinkWidget;
@@ -56,8 +60,6 @@ export '/sidescreens/groupfilters/groupfilters_widget.dart'
 export '/sidescreens/likedusers/likedusers_widget.dart' show LikedusersWidget;
 export '/sidescreens/settings/settings_widget.dart' show SettingsWidget;
 export '/sidescreens/helpcenter/helpcenter_widget.dart' show HelpcenterWidget;
-export '/sidescreens/notifications/notifications_widget.dart'
-    show NotificationsWidget;
 export '/sidescreens/webview/webview_widget.dart' show WebviewWidget;
 export '/sidescreens/accesslocation/accesslocation_widget.dart'
     show AccesslocationWidget;
@@ -128,10 +130,8 @@ export '/chatsnew/chatsnew_widget.dart' show ChatsnewWidget;
 export '/chat_room/chat_room_widget.dart' show ChatRoomWidget;
 export '/chat_room_info/chat_room_info_widget.dart' show ChatRoomInfoWidget;
 export '/player_new/player_new_widget.dart' show PlayerNewWidget;
-export '/game_requestsnew/game_requestsnew_widget.dart'
-    show GameRequestsnewWidget;
 export '/duorequestsnew/duorequestsnew_widget.dart' show DuorequestsnewWidget;
-export '/verification/login_new/login_new_widget.dart' show LoginNewWidget;
+// Old login removed - using new auth screens
 export '/screens/profile_menu/profile_menu_widget.dart' show ProfileMenuWidget;
 export '/screens/more_options/more_options_widget.dart' show MoreOptionsWidget;
 export '/screens/settings/settings_widget.dart' show SettingsScreenWidget;
@@ -141,3 +141,6 @@ export '/screens/profile/my_profile_widget.dart' show MyProfileWidget;
 export '/screens/bookings/my_bookings_widget.dart' show MyBookingsWidget;
 export '/screens/game_requests/game_requests_widget.dart' show GameRequestsWidget;
 export '/screens/play_friends/my_play_friends_widget.dart' show MyPlayFriendsWidget;
+export '/screens/notifications/notifications_screen_widget.dart' show NotificationsScreenWidget;
+export '/screens/referrals/referrals_screen_widget.dart' show ReferralsScreenWidget;
+export '/venue_booking/venue_booking_widget.dart' show VenueBookingWidget;

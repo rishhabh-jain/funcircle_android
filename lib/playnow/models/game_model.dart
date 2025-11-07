@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 class Game {
   final String id;
   final String createdBy;
+  final String? organizerName; // Organizer's display name
   final String sportType; // 'badminton', 'pickleball'
   final DateTime gameDate;
   final String startTime; // Format: "HH:mm"
@@ -25,10 +26,12 @@ class Game {
   final String? chatRoomId;
   final int currentPlayersCount;
   final DateTime createdAt;
+  final bool isOfficial; // True if organized by Fun Circle officially
 
   Game({
     required this.id,
     required this.createdBy,
+    this.organizerName,
     required this.sportType,
     required this.gameDate,
     required this.startTime,
@@ -49,6 +52,7 @@ class Game {
     this.chatRoomId,
     this.currentPlayersCount = 1,
     required this.createdAt,
+    this.isOfficial = false,
   });
 
   /// Generate auto title
@@ -56,9 +60,8 @@ class Game {
     final gameTypeLabel = _getGameTypeLabel();
     final sportLabel = sportType == 'badminton' ? 'Badminton' : 'Pickleball';
     final levelLabel = skillLevel != null ? 'Level $skillLevel' : 'Open';
-    final dateLabel = _formatDateForTitle();
 
-    return '$gameTypeLabel $sportLabel - $levelLabel - $dateLabel';
+    return '$gameTypeLabel $sportLabel - $levelLabel';
   }
 
   String _getGameTypeLabel() {
@@ -102,9 +105,9 @@ class Game {
     }
   }
 
-  /// Formatted date for display
+  /// Formatted date for display (without year)
   String get formattedDate =>
-      DateFormat('EEEE, MMM d, yyyy').format(gameDate);
+      DateFormat('MMM d').format(gameDate);
 
   /// Formatted time for display
   String get formattedTime => _formatTime();
@@ -116,17 +119,35 @@ class Game {
   int get slotsRemaining => playersNeeded - currentPlayersCount;
 
   /// Location display
-  String get locationDisplay => venueName ?? customLocation ?? 'Location TBD';
+  String get locationDisplay {
+    if (venueName != null && venueName!.isNotEmpty) {
+      return venueName!;
+    } else if (customLocation != null && customLocation!.isNotEmpty) {
+      return customLocation!;
+    }
+    return 'TBD';
+  }
 
   /// Cost display
   String get costDisplay =>
       isFree ? 'Free' : '₹${costPerPlayer?.toStringAsFixed(0)} per player';
 
+  /// Check if game is organized by Fun Circle officially
+  bool get isFunCircleOrganized => isOfficial;
+
   /// Create from JSON
   factory Game.fromJson(Map<String, dynamic> json) {
+    // Try to get organizer name from joined user data
+    String? organizerName;
+    final creator = json['creator'] as Map<String, dynamic>?;
+    if (creator != null) {
+      organizerName = creator['first_name'] as String?;
+    }
+
     return Game(
       id: json['id'] as String,
       createdBy: json['created_by'] as String,
+      organizerName: organizerName,
       sportType: json['sport_type'] as String,
       gameDate: DateTime.parse(json['game_date'] as String),
       startTime: json['start_time'] as String,
@@ -150,6 +171,7 @@ class Game {
       currentPlayersCount: json['current_players_count'] as int? ?? 1,
       createdAt: DateTime.parse(
           json['created_at'] as String? ?? DateTime.now().toIso8601String()),
+      isOfficial: json['is_official'] as bool? ?? false,
     );
   }
 
@@ -177,6 +199,7 @@ class Game {
       'chat_room_id': chatRoomId,
       'current_players_count': currentPlayersCount,
       'created_at': createdAt.toIso8601String(),
+      'is_official': isOfficial,
     };
   }
 
@@ -184,6 +207,7 @@ class Game {
   Game copyWith({
     String? id,
     String? createdBy,
+    String? organizerName,
     String? sportType,
     DateTime? gameDate,
     String? startTime,
@@ -204,10 +228,12 @@ class Game {
     String? chatRoomId,
     int? currentPlayersCount,
     DateTime? createdAt,
+    bool? isOfficial,
   }) {
     return Game(
       id: id ?? this.id,
       createdBy: createdBy ?? this.createdBy,
+      organizerName: organizerName ?? this.organizerName,
       sportType: sportType ?? this.sportType,
       gameDate: gameDate ?? this.gameDate,
       startTime: startTime ?? this.startTime,
@@ -228,6 +254,7 @@ class Game {
       chatRoomId: chatRoomId ?? this.chatRoomId,
       currentPlayersCount: currentPlayersCount ?? this.currentPlayersCount,
       createdAt: createdAt ?? this.createdAt,
+      isOfficial: isOfficial ?? this.isOfficial,
     );
   }
 }
@@ -277,7 +304,8 @@ class CreateGameRequest {
       'game_date': gameDate.toIso8601String().split('T')[0],
       'start_time': startTime,
       'venue_id': venueId,
-      'custom_location': customLocation,
+      // Only include custom_location if no venue is selected
+      if (venueId == null) 'custom_location': customLocation,
       'players_needed': playersNeeded,
       'game_type': gameType,
       'skill_level': skillLevel,

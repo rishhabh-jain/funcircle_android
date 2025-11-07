@@ -562,6 +562,11 @@ class _ViewGroupWidgetState extends State<ViewGroupWidget> {
                                                                       .groupJoined
                                                                   ? null
                                                                   : () async {
+                                                                      print('DEBUG: Join Group button pressed');
+                                                                      print('DEBUG: Group ID: ${widget.groupid}');
+                                                                      print('DEBUG: User ID: $currentUserUid');
+                                                                      print('DEBUG: Current groupJoined state: ${_model.groupJoined}');
+
                                                                       if (_model
                                                                               .groupJoined ==
                                                                           true) {
@@ -575,7 +580,7 @@ class _ViewGroupWidgetState extends State<ViewGroupWidget> {
                                                                             return WebViewAware(
                                                                               child: AlertDialog(
                                                                                 title: Text('Group already joined'),
-                                                                                content: Text('You have alredy joined this group. '),
+                                                                                content: Text('You have already joined this group.'),
                                                                                 actions: [
                                                                                   TextButton(
                                                                                     onPressed: () => Navigator.pop(alertDialogContext),
@@ -587,51 +592,112 @@ class _ViewGroupWidgetState extends State<ViewGroupWidget> {
                                                                           },
                                                                         );
                                                                       } else {
-                                                                        logFirebaseEvent(
-                                                                            'Button_backend_call');
-                                                                        await UserstogroupsTable()
-                                                                            .insert({
-                                                                          'user_id':
-                                                                              currentUserUid,
-                                                                          'group_id':
-                                                                              widget.groupid,
-                                                                          'invitation_status':
-                                                                              'accepted',
-                                                                        });
-                                                                        logFirebaseEvent(
-                                                                            'Button_refresh_database_request');
-                                                                        safeSetState(() =>
-                                                                            _model.requestCompleter =
-                                                                                null);
-                                                                        await _model
-                                                                            .waitForRequestCompleted();
-                                                                        logFirebaseEvent(
-                                                                            'Button_alert_dialog');
-                                                                        await showDialog(
-                                                                          context:
-                                                                              context,
-                                                                          builder:
-                                                                              (alertDialogContext) {
-                                                                            return WebViewAware(
-                                                                              child: AlertDialog(
-                                                                                title: Text('Group Joined'),
-                                                                                content: Text('You have sucessfully joined this group'),
-                                                                                actions: [
-                                                                                  TextButton(
-                                                                                    onPressed: () => Navigator.pop(alertDialogContext),
-                                                                                    child: Text('Ok'),
-                                                                                  ),
-                                                                                ],
+                                                                        // Show loading indicator
+                                                                        showDialog(
+                                                                          context: context,
+                                                                          barrierDismissible: false,
+                                                                          builder: (context) => Center(
+                                                                            child: CircularProgressIndicator(
+                                                                              valueColor: AlwaysStoppedAnimation<Color>(
+                                                                                FlutterFlowTheme.of(context).primary,
                                                                               ),
-                                                                            );
-                                                                          },
+                                                                            ),
+                                                                          ),
                                                                         );
-                                                                        logFirebaseEvent(
-                                                                            'Button_update_page_state');
-                                                                        _model.groupJoined =
-                                                                            true;
-                                                                        safeSetState(
-                                                                            () {});
+
+                                                                        print('DEBUG: Attempting to insert into userstogroups table...');
+
+                                                                        try {
+                                                                          logFirebaseEvent(
+                                                                              'Button_backend_call');
+                                                                          await UserstogroupsTable()
+                                                                              .insert({
+                                                                            'user_id':
+                                                                                currentUserUid,
+                                                                            'group_id':
+                                                                                widget.groupid,
+                                                                            'invitation_status':
+                                                                                'accepted',
+                                                                          });
+
+                                                                          print('DEBUG: Successfully inserted into database');
+
+                                                                          // Close loading dialog
+                                                                          if (context.mounted) {
+                                                                            Navigator.pop(context);
+                                                                          }
+
+                                                                          logFirebaseEvent(
+                                                                              'Button_refresh_database_request');
+                                                                          safeSetState(() =>
+                                                                              _model.requestCompleter =
+                                                                                  null);
+                                                                          await _model
+                                                                              .waitForRequestCompleted();
+
+                                                                          logFirebaseEvent(
+                                                                              'Button_alert_dialog');
+                                                                          if (context.mounted) {
+                                                                            await showDialog(
+                                                                              context:
+                                                                                  context,
+                                                                              builder:
+                                                                                  (alertDialogContext) {
+                                                                                return WebViewAware(
+                                                                                  child: AlertDialog(
+                                                                                    title: Text('Group Joined'),
+                                                                                    content: Text('You have successfully joined this group'),
+                                                                                    actions: [
+                                                                                      TextButton(
+                                                                                        onPressed: () => Navigator.pop(alertDialogContext),
+                                                                                        child: Text('Ok'),
+                                                                                      ),
+                                                                                    ],
+                                                                                  ),
+                                                                                );
+                                                                              },
+                                                                            );
+                                                                          }
+
+                                                                          logFirebaseEvent(
+                                                                              'Button_update_page_state');
+                                                                          _model.groupJoined =
+                                                                              true;
+                                                                          safeSetState(
+                                                                              () {});
+
+                                                                        } catch (e, stackTrace) {
+                                                                          print('ERROR: Failed to join group: $e');
+                                                                          print('STACK: $stackTrace');
+
+                                                                          // Close loading dialog
+                                                                          if (context.mounted) {
+                                                                            try {
+                                                                              Navigator.pop(context);
+                                                                            } catch (popError) {
+                                                                              print('ERROR: Could not pop loading dialog: $popError');
+                                                                            }
+
+                                                                            // Show error message
+                                                                            await showDialog(
+                                                                              context: context,
+                                                                              builder: (alertDialogContext) {
+                                                                                return WebViewAware(
+                                                                                  child: AlertDialog(
+                                                                                    title: Text('Failed to Join Group'),
+                                                                                    content: Text('Something went wrong. Please check your internet connection and try again.'),
+                                                                                    actions: [
+                                                                                      TextButton(
+                                                                                        onPressed: () => Navigator.pop(alertDialogContext),
+                                                                                        child: Text('Ok'),
+                                                                                      ),
+                                                                                    ],
+                                                                                  ),
+                                                                                );
+                                                                              },
+                                                                            );
+                                                                          }
+                                                                        }
                                                                       }
                                                                     },
                                                               text:

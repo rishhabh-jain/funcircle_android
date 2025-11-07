@@ -52,12 +52,19 @@
   
 </head>
 <body>
-  
+
+  <!-- Invisible reCAPTCHA container for Firebase phone auth -->
+  <div id="recaptcha-container"></div>
+
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDObdEGkY8kLUYdPypdFuxpk_s-ZSDsD5s"></script>
-  
-  
+
+
   <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
 	<script src="src/razorpay_checkout.js"></script>
+
+  <!-- Invisible reCAPTCHA configuration -->
+  <script src="src/recaptcha_config.js" defer></script>
+
   <script>
     {{flutter_bootstrap_js}}
   </script>

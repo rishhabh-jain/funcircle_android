@@ -8,7 +8,7 @@ import '../models/skill_level.dart';
 
 /// Utility class for building custom map markers
 class MapMarkerBuilder {
-  /// Create marker for available player
+  /// Create marker for available player with name, time, and level
   static Future<BitmapDescriptor> createPlayerMarker({
     required String? profilePictureUrl,
     required int? skillLevel,
@@ -16,7 +16,66 @@ class MapMarkerBuilder {
   }) async {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    const size = 120.0;
+    const markerSize = 100.0;
+    const labelPadding = 8.0;
+
+    // Get skill level info
+    final skillLevelEnum =
+        skillLevel != null ? SkillLevel.fromValue(skillLevel) : null;
+    final skillText = skillLevelEnum?.label ?? 'New';
+
+    // Create multi-line label with name, time, and level
+    final namePainter = TextPainter(
+      text: TextSpan(
+        text: userName,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 13,
+          fontWeight: FontWeight.bold,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    namePainter.layout();
+
+    final timePainter = TextPainter(
+      text: const TextSpan(
+        text: 'Online now',
+        style: TextStyle(
+          color: Colors.white70,
+          fontSize: 10,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    timePainter.layout();
+
+    final levelPainter = TextPainter(
+      text: TextSpan(
+        text: 'Level: $skillText',
+        style: TextStyle(
+          color: skillLevelEnum != null
+              ? _hexToColor(skillLevelEnum.hexColor)
+              : Colors.grey,
+          fontSize: 10,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    levelPainter.layout();
+
+    final maxWidth = [namePainter.width, timePainter.width, levelPainter.width]
+        .reduce((a, b) => a > b ? a : b);
+    final totalWidth = markerSize + labelPadding + maxWidth + 20;
+    final totalHeight = markerSize + 15;
+
+    // Draw shadow for 3D effect
+    final shadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.3)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+    canvas.drawCircle(
+        const Offset(markerSize / 2 + 3, markerSize / 2 + 4), 38, shadowPaint);
 
     // Draw skill level color ring
     if (skillLevel != null) {
@@ -24,11 +83,11 @@ class MapMarkerBuilder {
       final ringPaint = Paint()
         ..color = _hexToColor(skillLevelEnum.hexColor)
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 6.0;
+        ..strokeWidth = 5.0;
 
       canvas.drawCircle(
-        const Offset(size / 2, size / 2),
-        40,
+        const Offset(markerSize / 2, markerSize / 2),
+        38,
         ringPaint,
       );
     }
@@ -37,7 +96,8 @@ class MapMarkerBuilder {
     final bgPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.fill;
-    canvas.drawCircle(const Offset(size / 2, size / 2), 35, bgPaint);
+    canvas.drawCircle(
+        const Offset(markerSize / 2, markerSize / 2), 34, bgPaint);
 
     // Draw profile picture or placeholder
     if (profilePictureUrl != null && profilePictureUrl.isNotEmpty) {
@@ -56,29 +116,39 @@ class MapMarkerBuilder {
         final clipPath = Path()
           ..addOval(
             Rect.fromCircle(
-                center: const Offset(size / 2, size / 2), radius: 33),
+                center: const Offset(markerSize / 2, markerSize / 2),
+                radius: 32),
           );
         canvas.clipPath(clipPath);
         canvas.drawImageRect(
           image,
           Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
-          Rect.fromCircle(center: const Offset(size / 2, size / 2), radius: 33),
+          Rect.fromCircle(
+              center: const Offset(markerSize / 2, markerSize / 2), radius: 32),
           Paint(),
         );
         canvas.restore();
       } catch (e) {
         print('Error loading profile image: $e');
-        _drawPlaceholderIcon(canvas, size);
+        _drawPlaceholderIcon(canvas, markerSize);
       }
     } else {
-      _drawPlaceholderIcon(canvas, size);
+      _drawPlaceholderIcon(canvas, markerSize);
     }
 
-    // Draw pointer at bottom
+    // Draw 3D pointer at bottom with shadow
+    final pointerShadowPath = Path()
+      ..moveTo(markerSize / 2 - 10, markerSize - 24)
+      ..lineTo(markerSize / 2 + 2, markerSize + 8)
+      ..lineTo(markerSize / 2 + 12, markerSize - 24)
+      ..close();
+    canvas.drawPath(pointerShadowPath,
+        Paint()..color = Colors.black.withValues(alpha: 0.2));
+
     final pointerPath = Path()
-      ..moveTo(size / 2 - 10, size - 25)
-      ..lineTo(size / 2, size)
-      ..lineTo(size / 2 + 10, size - 25)
+      ..moveTo(markerSize / 2 - 10, markerSize - 24)
+      ..lineTo(markerSize / 2, markerSize + 3)
+      ..lineTo(markerSize / 2 + 10, markerSize - 24)
       ..close();
 
     final pointerPaint = Paint()
@@ -88,90 +158,244 @@ class MapMarkerBuilder {
       ..style = PaintingStyle.fill;
     canvas.drawPath(pointerPath, pointerPaint);
 
+    // Draw text label to the right of marker with multiple lines
+    final labelBg = Paint()
+      ..color = Colors.black.withValues(alpha: 0.75)
+      ..style = PaintingStyle.fill;
+    final labelHeight = 48.0;
+    final labelRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        markerSize + labelPadding,
+        markerSize / 2 - labelHeight / 2,
+        maxWidth + 16,
+        labelHeight,
+      ),
+      const Radius.circular(10),
+    );
+    canvas.drawRRect(labelRect, labelBg);
+
+    // Draw name
+    namePainter.paint(
+      canvas,
+      Offset(
+          markerSize + labelPadding + 8, markerSize / 2 - labelHeight / 2 + 6),
+    );
+
+    // Draw time
+    timePainter.paint(
+      canvas,
+      Offset(
+          markerSize + labelPadding + 8, markerSize / 2 - labelHeight / 2 + 22),
+    );
+
+    // Draw level
+    levelPainter.paint(
+      canvas,
+      Offset(
+          markerSize + labelPadding + 8, markerSize / 2 - labelHeight / 2 + 34),
+    );
+
     final picture = recorder.endRecording();
-    final img = await picture.toImage(size.toInt(), (size + 5).toInt());
+    final img = await picture.toImage(totalWidth.toInt(), totalHeight.toInt());
     final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
 
-    return BitmapDescriptor.fromBytes(bytes!.buffer.asUint8List());
+    return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
   }
 
-  /// Create marker for player request
+  /// Create marker for player request with label
   static Future<BitmapDescriptor> createRequestMarker({
     required int playersNeeded,
     required int? skillLevel,
   }) async {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    const size = 100.0;
+    const markerSize = 90.0;
+    const labelPadding = 8.0;
+
+    // Create label text
+    final labelText = 'Need $playersNeeded';
+    final labelPainter = TextPainter(
+      text: TextSpan(
+        text: labelText,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          shadows: [
+            Shadow(
+              offset: Offset(1, 1),
+              blurRadius: 3,
+              color: Color.fromARGB(150, 0, 0, 0),
+            ),
+          ],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    labelPainter.layout();
+
+    final totalWidth = markerSize + labelPadding + labelPainter.width + 20;
+    final totalHeight = markerSize + 12;
+
+    // Draw shadow for 3D effect
+    final shadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.3)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+    canvas.drawCircle(
+        const Offset(markerSize / 2 + 3, markerSize / 2 + 4), 36, shadowPaint);
 
     // Draw background circle
     final bgPaint = Paint()
       ..color = Colors.orange
       ..style = PaintingStyle.fill;
-    canvas.drawCircle(const Offset(size / 2, size / 2), 40, bgPaint);
+    canvas.drawCircle(
+        const Offset(markerSize / 2, markerSize / 2), 34, bgPaint);
 
     // Draw white border
     final borderPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
       ..strokeWidth = 4.0;
-    canvas.drawCircle(const Offset(size / 2, size / 2), 40, borderPaint);
+    canvas.drawCircle(
+        const Offset(markerSize / 2, markerSize / 2), 34, borderPaint);
 
-    // Draw text (players needed)
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: 'Need\n$playersNeeded',
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          height: 1.2,
-        ),
-      ),
-      textAlign: TextAlign.center,
-      textDirection: TextDirection.ltr,
-    );
-    textPainter.layout();
-    textPainter.paint(
-      canvas,
-      Offset(
-        size / 2 - textPainter.width / 2,
-        size / 2 - textPainter.height / 2,
-      ),
-    );
+    // Draw icon in center
+    _drawIcon(canvas, Icons.group_add,
+        const Offset(markerSize / 2, markerSize / 2), Colors.white, 28);
 
-    // Draw pointer
+    // Draw 3D pointer with shadow
+    final pointerShadowPath = Path()
+      ..moveTo(markerSize / 2 - 10, markerSize - 22)
+      ..lineTo(markerSize / 2 + 2, markerSize + 8)
+      ..lineTo(markerSize / 2 + 12, markerSize - 22)
+      ..close();
+    canvas.drawPath(pointerShadowPath,
+        Paint()..color = Colors.black.withValues(alpha: 0.2));
+
     final pointerPath = Path()
-      ..moveTo(size / 2 - 10, size - 20)
-      ..lineTo(size / 2, size)
-      ..lineTo(size / 2 + 10, size - 20)
+      ..moveTo(markerSize / 2 - 10, markerSize - 22)
+      ..lineTo(markerSize / 2, markerSize + 3)
+      ..lineTo(markerSize / 2 + 10, markerSize - 22)
       ..close();
     canvas.drawPath(pointerPath, Paint()..color = Colors.orange);
 
+    // Draw text label to the right of marker
+    final labelBg = Paint()
+      ..color = Colors.orange.withValues(alpha: 0.9)
+      ..style = PaintingStyle.fill;
+    final labelRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        markerSize + labelPadding,
+        markerSize / 2 - 12,
+        labelPainter.width + 12,
+        24,
+      ),
+      const Radius.circular(12),
+    );
+    canvas.drawRRect(labelRect, labelBg);
+
+    labelPainter.paint(
+      canvas,
+      Offset(markerSize + labelPadding + 6,
+          markerSize / 2 - labelPainter.height / 2),
+    );
+
     final picture = recorder.endRecording();
-    final img = await picture.toImage(size.toInt(), (size + 5).toInt());
+    final img = await picture.toImage(totalWidth.toInt(), totalHeight.toInt());
     final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
 
-    return BitmapDescriptor.fromBytes(bytes!.buffer.asUint8List());
+    return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
   }
 
-  /// Create marker for venue
-  static Future<BitmapDescriptor> createVenueMarker() async {
+  /// Create 3D marker for venue with label and sport-specific styling
+  static Future<BitmapDescriptor> createVenueMarker({
+    required String venueName,
+    required String? sportType,
+  }) async {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    const size = 80.0;
+    const markerSize = 85.0;
+    const labelPadding = 8.0;
 
-    // Draw location pin shape
+    // Determine color and icon based on sport type
+    Color pinColor;
+    Color labelColor;
+    IconData iconData;
+
+    switch (sportType?.toLowerCase()) {
+      case 'badminton':
+        pinColor = const Color(0xFF00BFA5); // Teal/cyan for badminton
+        labelColor = const Color(0xFF00BFA5);
+        iconData = Icons.sports_tennis; // Racquet sports icon
+        break;
+      case 'pickleball':
+        pinColor = const Color(0xFFFF9800); // Orange for pickleball
+        labelColor = const Color(0xFFFF9800);
+        iconData = Icons.sports_baseball; // Paddle sports icon
+        break;
+      case 'both':
+        pinColor = const Color(0xFF9C27B0); // Purple for both sports
+        labelColor = const Color(0xFF9C27B0);
+        iconData = Icons.sports; // General sports icon
+        break;
+      default:
+        pinColor = Colors.blue; // Default blue
+        labelColor = Colors.blue;
+        iconData = Icons.location_city;
+    }
+
+    // Create label text
+    final labelPainter = TextPainter(
+      text: TextSpan(
+        text: venueName,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          shadows: [
+            Shadow(
+              offset: Offset(1, 1),
+              blurRadius: 3,
+              color: Color.fromARGB(150, 0, 0, 0),
+            ),
+          ],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+      ellipsis: '...',
+    );
+    labelPainter.layout(maxWidth: 150); // Limit width
+
+    final totalWidth = markerSize + labelPadding + labelPainter.width + 20;
+    final totalHeight = markerSize + 5;
+
+    // Draw shadow for 3D effect
+    final shadowPath = Path()
+      ..addOval(Rect.fromCircle(
+          center: const Offset(markerSize / 2 + 3, markerSize / 2.5 + 3),
+          radius: 26))
+      ..moveTo(markerSize / 2 - 10, markerSize / 1.8)
+      ..lineTo(markerSize / 2 + 2, markerSize - 2)
+      ..lineTo(markerSize / 2 + 12, markerSize / 1.8)
+      ..close();
+    canvas.drawPath(
+        shadowPath,
+        Paint()
+          ..color = Colors.black.withValues(alpha: 0.3)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5));
+
+    // Draw location pin shape with sport-specific color
     final pinPath = Path()
-      ..addOval(
-          Rect.fromCircle(center: const Offset(size / 2, size / 3), radius: 25))
-      ..moveTo(size / 2 - 10, size / 2)
-      ..lineTo(size / 2, size - 5)
-      ..lineTo(size / 2 + 10, size / 2)
+      ..addOval(Rect.fromCircle(
+          center: const Offset(markerSize / 2, markerSize / 2.5), radius: 26))
+      ..moveTo(markerSize / 2 - 10, markerSize / 1.8)
+      ..lineTo(markerSize / 2, markerSize - 5)
+      ..lineTo(markerSize / 2 + 10, markerSize / 1.8)
       ..close();
 
     final pinPaint = Paint()
-      ..color = Colors.blue
+      ..color = pinColor
       ..style = PaintingStyle.fill;
     canvas.drawPath(pinPath, pinPaint);
 
@@ -179,21 +403,43 @@ class MapMarkerBuilder {
     final borderPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.0;
-    canvas.drawCircle(const Offset(size / 2, size / 3), 25, borderPaint);
+      ..strokeWidth = 4.0;
+    canvas.drawCircle(
+        const Offset(markerSize / 2, markerSize / 2.5), 26, borderPaint);
 
-    // Draw icon in center
-    _drawIcon(canvas, Icons.location_city, const Offset(size / 2, size / 3),
-        Colors.white);
+    // Draw sport-specific icon in center
+    _drawIcon(canvas, iconData, const Offset(markerSize / 2, markerSize / 2.5),
+        Colors.white, 26);
+
+    // Draw text label to the right of marker with sport-specific color
+    final labelBg = Paint()
+      ..color = labelColor.withValues(alpha: 0.9)
+      ..style = PaintingStyle.fill;
+    final labelRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        markerSize + labelPadding,
+        markerSize / 2 - 12,
+        labelPainter.width + 12,
+        24,
+      ),
+      const Radius.circular(12),
+    );
+    canvas.drawRRect(labelRect, labelBg);
+
+    labelPainter.paint(
+      canvas,
+      Offset(markerSize + labelPadding + 6,
+          markerSize / 2 - labelPainter.height / 2),
+    );
 
     final picture = recorder.endRecording();
-    final img = await picture.toImage(size.toInt(), size.toInt());
+    final img = await picture.toImage(totalWidth.toInt(), totalHeight.toInt());
     final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
 
-    return BitmapDescriptor.fromBytes(bytes!.buffer.asUint8List());
+    return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
   }
 
-  /// Create marker for game session
+  /// Create 3D marker for game session with label
   static Future<BitmapDescriptor> createSessionMarker({
     required int currentPlayers,
     required int maxPlayers,
@@ -201,72 +447,119 @@ class MapMarkerBuilder {
   }) async {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    const size = 120.0;
+    const markerSize = 95.0;
+    const labelPadding = 8.0;
+
+    // Create label text
+    final labelText = 'Session $currentPlayers/$maxPlayers';
+    final labelPainter = TextPainter(
+      text: TextSpan(
+        text: labelText,
+        style: const TextStyle(
+          color: Colors.white,
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          shadows: [
+            Shadow(
+              offset: Offset(1, 1),
+              blurRadius: 3,
+              color: Color.fromARGB(150, 0, 0, 0),
+            ),
+          ],
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    labelPainter.layout();
+
+    final totalWidth = markerSize + labelPadding + labelPainter.width + 20;
+    final totalHeight = markerSize + 12;
+
+    // Draw shadow for 3D effect
+    final shadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.3)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+    canvas.drawCircle(
+        const Offset(markerSize / 2 + 3, markerSize / 2 + 4), 38, shadowPaint);
 
     // Draw background circle
     final bgPaint = Paint()
       ..color = Colors.purple
       ..style = PaintingStyle.fill;
-    canvas.drawCircle(const Offset(size / 2, size / 2), 45, bgPaint);
+    canvas.drawCircle(
+        const Offset(markerSize / 2, markerSize / 2), 36, bgPaint);
 
     // Draw white border
     final borderPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
       ..strokeWidth = 4.0;
-    canvas.drawCircle(const Offset(size / 2, size / 2), 45, borderPaint);
+    canvas.drawCircle(
+        const Offset(markerSize / 2, markerSize / 2), 36, borderPaint);
 
-    // Draw session info text
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: 'Session\n$currentPlayers/$maxPlayers',
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 14,
-          fontWeight: FontWeight.bold,
-          height: 1.3,
-        ),
-      ),
-      textAlign: TextAlign.center,
-      textDirection: TextDirection.ltr,
-    );
-    textPainter.layout();
-    textPainter.paint(
-      canvas,
-      Offset(
-        size / 2 - textPainter.width / 2,
-        size / 2 - textPainter.height / 2,
-      ),
-    );
+    // Draw icon in center
+    _drawIcon(canvas, Icons.sports,
+        const Offset(markerSize / 2, markerSize / 2), Colors.white, 30);
 
-    // Draw pointer
+    // Draw 3D pointer with shadow
+    final pointerShadowPath = Path()
+      ..moveTo(markerSize / 2 - 10, markerSize - 23)
+      ..lineTo(markerSize / 2 + 2, markerSize + 8)
+      ..lineTo(markerSize / 2 + 12, markerSize - 23)
+      ..close();
+    canvas.drawPath(pointerShadowPath,
+        Paint()..color = Colors.black.withValues(alpha: 0.2));
+
     final pointerPath = Path()
-      ..moveTo(size / 2 - 12, size - 25)
-      ..lineTo(size / 2, size)
-      ..lineTo(size / 2 + 12, size - 25)
+      ..moveTo(markerSize / 2 - 10, markerSize - 23)
+      ..lineTo(markerSize / 2, markerSize + 3)
+      ..lineTo(markerSize / 2 + 10, markerSize - 23)
       ..close();
     canvas.drawPath(pointerPath, Paint()..color = Colors.purple);
 
+    // Draw text label to the right of marker
+    final labelBg = Paint()
+      ..color = Colors.purple.withValues(alpha: 0.9)
+      ..style = PaintingStyle.fill;
+    final labelRect = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        markerSize + labelPadding,
+        markerSize / 2 - 12,
+        labelPainter.width + 12,
+        24,
+      ),
+      const Radius.circular(12),
+    );
+    canvas.drawRRect(labelRect, labelBg);
+
+    labelPainter.paint(
+      canvas,
+      Offset(markerSize + labelPadding + 6,
+          markerSize / 2 - labelPainter.height / 2),
+    );
+
     final picture = recorder.endRecording();
-    final img = await picture.toImage(size.toInt(), (size + 5).toInt());
+    final img = await picture.toImage(totalWidth.toInt(), totalHeight.toInt());
     final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
 
-    return BitmapDescriptor.fromBytes(bytes!.buffer.asUint8List());
+    return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
   }
 
   /// Helper: Draw placeholder icon for missing profile picture
   static void _drawPlaceholderIcon(Canvas canvas, double size) {
-    _drawIcon(canvas, Icons.person, Offset(size / 2, size / 2), Colors.grey);
+    _drawIcon(
+        canvas, Icons.person, Offset(size / 2, size / 2), Colors.grey, 40);
   }
 
   /// Helper: Draw icon on canvas
   static void _drawIcon(
-      Canvas canvas, IconData icon, Offset center, Color color) {
+      Canvas canvas, IconData icon, Offset center, Color color,
+      [double iconSize = 30]) {
     final textPainter = TextPainter(
       text: TextSpan(
         text: String.fromCharCode(icon.codePoint),
         style: TextStyle(
-          fontSize: 30,
+          fontSize: iconSize,
           fontFamily: icon.fontFamily,
           color: color,
         ),

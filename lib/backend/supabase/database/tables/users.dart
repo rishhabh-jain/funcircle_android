@@ -155,4 +155,7 @@ class UsersRow extends SupabaseDataRow {
 
   List<String> get preferredSports => getListField<String>('preferred_sports');
   set preferredSports(List<String>? value) => setListField<String>('preferred_sports', value);
+
+  DateTime? get deletedAt => getField<DateTime>('deleted_at');
+  set deletedAt(DateTime? value) => setField<DateTime>('deleted_at', value);
 }

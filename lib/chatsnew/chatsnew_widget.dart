@@ -243,11 +243,29 @@ class _ChatsnewWidgetState extends State<ChatsnewWidget> {
             print('DEBUG: Error fetching last message for room $roomId: $messageError');
           }
 
+          // Check if current user has sent any messages in this room
+          bool userHasMessaged = false;
+          try {
+            final userMessageResponse = await SupaFlow.client
+                .schema('chat')
+                .from('messages')
+                .select('id')
+                .eq('room_id', roomId)
+                .eq('sender_id', currentUserUid)
+                .eq('is_deleted', false)
+                .limit(1);
+
+            userHasMessaged = (userMessageResponse as List).isNotEmpty;
+          } catch (messageError) {
+            print('DEBUG: Error checking user messages for room $roomId: $messageError');
+          }
+
           roomDetailsMap[roomId] = {
             'venueImages': venueImages,
             'groupId': groupId,
             'lastMessage': lastMessage,
             'lastMessageTime': lastMessageTime,
+            'userHasMessaged': userHasMessaged,
           };
         } catch (roomError) {
           print('DEBUG: Error processing room: $roomError');
@@ -428,7 +446,8 @@ class _ChatsnewWidgetState extends State<ChatsnewWidget> {
                       )),
                       ChipData(FFLocalizations.of(context).getText(
                         '8u99q7v2' /* Padel */,
-                      ))
+                      )),
+                      ChipData('PlayTime')
                     ],
                     onChanged: (val) => safeSetState(
                         () => _model.choiceChipsValue = val?.firstOrNull),
@@ -523,22 +542,39 @@ class _ChatsnewWidgetState extends State<ChatsnewWidget> {
                               final roomDetails = _model.chatRoomDetails?[room.id] as Map<String, dynamic>?;
                               final groupId = roomDetails?['groupId'] as int?;
 
-                              // Filter by sport type using group IDs
+                              // Filter by sport type using group IDs or PlayTime
                               if (_model.choiceChipsValue != null &&
                                   _model.choiceChipsValue!.isNotEmpty) {
-                                final selectedSport = _model.choiceChipsValue!.toLowerCase();
-                                int? expectedGroupId;
+                                final selectedFilter = _model.choiceChipsValue!.toLowerCase();
 
-                                if (selectedSport.contains('badminton')) {
-                                  expectedGroupId = 90;
-                                } else if (selectedSport.contains('pickleball')) {
-                                  expectedGroupId = 104;
-                                } else if (selectedSport.contains('padel')) {
-                                  expectedGroupId = 105;
-                                }
+                                // PlayTime filter - show only game chat rooms where user has messaged
+                                if (selectedFilter == 'playtime') {
+                                  final metaData = room.metaData;
+                                  final hasGameId = metaData is Map &&
+                                      metaData.containsKey('game_id') &&
+                                      metaData['game_id'] != null;
 
-                                if (expectedGroupId != null && groupId != expectedGroupId) {
-                                  return SizedBox.shrink();
+                                  final userHasMessaged = roomDetails?['userHasMessaged'] as bool? ?? false;
+
+                                  // Only show if it's a game chat AND user has sent messages
+                                  if (!hasGameId || !userHasMessaged) {
+                                    return SizedBox.shrink();
+                                  }
+                                } else {
+                                  // Sport type filters
+                                  int? expectedGroupId;
+
+                                  if (selectedFilter.contains('badminton')) {
+                                    expectedGroupId = 90;
+                                  } else if (selectedFilter.contains('pickleball')) {
+                                    expectedGroupId = 104;
+                                  } else if (selectedFilter.contains('padel')) {
+                                    expectedGroupId = 105;
+                                  }
+
+                                  if (expectedGroupId != null && groupId != expectedGroupId) {
+                                    return SizedBox.shrink();
+                                  }
                                 }
                               }
 

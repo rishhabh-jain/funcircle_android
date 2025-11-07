@@ -29,6 +29,9 @@ class HomeNewModel extends FlutterFlowModel<HomeNewWidget> {
   // Track calculation request ID to prevent race conditions
   int calculationRequestId = 0;
 
+  // Notifications unread count
+  int unreadNotificationsCount = 0;
+
   ///  State fields for stateful widgets in this page.
 
   // State field(s) for ChoiceChips widget.
