@@ -84,9 +84,12 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
     super.dispose();
   }
 
-  Future<void> _fetchUserLocation() async {
-    // First check if we have a persisted location
-    if (FFAppState().locationDisplayText.isNotEmpty &&
+  /// Fetch user's current location
+  /// Set [forceRefresh] to true to bypass cached location and fetch from GPS
+  Future<void> _fetchUserLocation({bool forceRefresh = false}) async {
+    // First check if we have a persisted location (only if not forcing refresh)
+    if (!forceRefresh &&
+        FFAppState().locationDisplayText.isNotEmpty &&
         FFAppState().userLocation != null) {
       safeSetState(() {
         _model.userLocation = FFAppState().userLocation;
@@ -117,15 +120,76 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
           FFAppState().locationDisplayText = 'Current Location';
         });
       } else {
+        // Location is null - either permission denied or location disabled
         safeSetState(() {
           _model.isLoadingLocation = false;
         });
+
+        if (mounted && forceRefresh) {
+          // Only show error if user explicitly tried to refresh
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                'Unable to get location. Please enable location services and grant permission in Settings.',
+              ),
+              backgroundColor: Colors.orange,
+              duration: const Duration(seconds: 4),
+              behavior: SnackBarBehavior.floating,
+              margin: const EdgeInsets.all(16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              action: SnackBarAction(
+                label: 'Settings',
+                textColor: Colors.white,
+                onPressed: () async {
+                  // Try to open app settings
+                  await actions.turnOnGPS();
+                },
+              ),
+            ),
+          );
+        }
       }
     } catch (e) {
       print('Error fetching location: $e');
       safeSetState(() {
         _model.isLoadingLocation = false;
       });
+
+      if (mounted && forceRefresh) {
+        // Only show error if user explicitly tried to refresh
+        String errorMessage = 'Unable to get your location.';
+
+        // Try to provide more specific error message
+        final errorStr = e.toString().toLowerCase();
+        if (errorStr.contains('permission') || errorStr.contains('denied')) {
+          errorMessage = 'Location permission denied. Please grant permission in Settings.';
+        } else if (errorStr.contains('disabled') || errorStr.contains('service')) {
+          errorMessage = 'Location services disabled. Please enable location in Settings.';
+        }
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 4),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            action: SnackBarAction(
+              label: 'Settings',
+              textColor: Colors.white,
+              onPressed: () async {
+                // Try to open app settings
+                await actions.turnOnGPS();
+              },
+            ),
+          ),
+        );
+      }
     }
   }
 
@@ -1009,12 +1073,30 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                             const SizedBox(width: 12),
                             // Watery Glass GPS Button
                             InkWell(
-                              onTap: () {
+                              onTap: () async {
                                 safeSetState(() {
                                   _model.venueDistances.clear();
                                   _model.lastCalculatedLocation = null;
                                 });
-                                _fetchUserLocation();
+
+                                // Force refresh location from GPS
+                                await _fetchUserLocation(forceRefresh: true);
+
+                                // Show success feedback
+                                if (mounted && _model.userLocation != null) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text('Location updated: ${_model.locationDisplayText}'),
+                                      backgroundColor: Colors.green,
+                                      duration: const Duration(seconds: 2),
+                                      behavior: SnackBarBehavior.floating,
+                                      margin: const EdgeInsets.all(16),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                  );
+                                }
                               },
                               child: Stack(
                                 children: [
@@ -1075,17 +1157,28 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                                             ),
                                           ],
                                         ),
-                                        child: const Icon(
-                                          Icons.my_location,
-                                          color: Colors.white,
-                                          size: 22.0,
-                                          shadows: [
-                                            Shadow(
-                                              color: Colors.black26,
-                                              blurRadius: 4,
-                                            ),
-                                          ],
-                                        ),
+                                        child: _model.isLoadingLocation
+                                            ? const SizedBox(
+                                                width: 22,
+                                                height: 22,
+                                                child: CircularProgressIndicator(
+                                                  strokeWidth: 2.5,
+                                                  valueColor:
+                                                      AlwaysStoppedAnimation<
+                                                          Color>(Colors.white),
+                                                ),
+                                              )
+                                            : const Icon(
+                                                Icons.my_location,
+                                                color: Colors.white,
+                                                size: 22.0,
+                                                shadows: [
+                                                  Shadow(
+                                                    color: Colors.black26,
+                                                    blurRadius: 4,
+                                                  ),
+                                                ],
+                                              ),
                                       ),
                                     ),
                                   ),
@@ -2163,7 +2256,8 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                                                                 ),
                                                               ],
                                                             ),
-                                                            // Enhanced button
+                                                            const SizedBox(height: 12.0),
+                                                            // Book now button
                                                             Container(
                                                               width: double
                                                                   .infinity,
@@ -2198,9 +2292,16 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                                                                 color: Colors
                                                                     .transparent,
                                                                 child: InkWell(
-                                                                  onTap: () {
-                                                                    print(
-                                                                        'Join group tapped');
+                                                                  onTap: () async {
+                                                                    await Navigator.push(
+                                                                      context,
+                                                                      MaterialPageRoute(
+                                                                        builder: (context) =>
+                                                                            SingleVenueNewWidget(
+                                                                          venueid: venue.id,
+                                                                        ),
+                                                                      ),
+                                                                    );
                                                                   },
                                                                   borderRadius:
                                                                       BorderRadius
@@ -2208,11 +2309,7 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                                                                               12.0),
                                                                   child: Center(
                                                                     child: Text(
-                                                                      FFLocalizations.of(
-                                                                              context)
-                                                                          .getText(
-                                                                        'ac7w3ipb' /* Join group */,
-                                                                      ),
+                                                                      'Book now',
                                                                       style: FlutterFlowTheme.of(
                                                                               context)
                                                                           .bodyMedium

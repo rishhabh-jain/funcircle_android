@@ -39,7 +39,7 @@ class GameService {
         print('\nCreating chat room...');
         String? chatRoomId;
         try {
-          chatRoomId = await _createGameChatRoom(game.id);
+          chatRoomId = await _createGameChatRoom(game);
           if (chatRoomId != null) {
             // Update game with chat_room_id
             await _client.schema('playnow').from('games')
@@ -428,6 +428,8 @@ class GameService {
     String? customLocation,
     int? playersNeeded,
     String? description,
+    bool? isFree,
+    double? costPerPlayer,
   }) async {
     try {
       // Get game info
@@ -471,10 +473,8 @@ class GameService {
         }
       }
       if (description != null) updates['description'] = description;
-
-      // Add edit tracking
-      updates['last_edited_at'] = DateTime.now().toIso8601String();
-      updates['edited_by'] = userId;
+      if (isFree != null) updates['is_free'] = isFree;
+      if (costPerPlayer != null) updates['cost_per_player'] = costPerPlayer;
 
       // Update game
       await _client
@@ -912,18 +912,41 @@ class GameService {
     }
   }
 
-  static Future<String?> _createGameChatRoom(String gameId) async {
+  static Future<String?> _createGameChatRoom(Game game) async {
     try {
+      // Generate room name from game details
+      final roomName = '${game.autoTitle} - ${_formatGameDate(game.gameDate)}';
+
       final result = await _client.schema('chat').from('rooms').insert({
+        'name': roomName,
         'type': 'group',
-        'meta_data': {'game_id': gameId},
+        'sport_type': game.sportType,
+        'meta_data': {'game_id': game.id},
         'created_at': DateTime.now().toIso8601String(),
       }).select('id').single();
 
+      print('Chat room created with name: $roomName');
       return result['id'] as String;
     } catch (e) {
       print('Error creating game chat room: $e');
       return null;
+    }
+  }
+
+  static String _formatGameDate(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(Duration(days: 1));
+    final gameDay = DateTime(date.year, date.month, date.day);
+
+    if (gameDay == today) {
+      return 'Today';
+    } else if (gameDay == tomorrow) {
+      return 'Tomorrow';
+    } else {
+      // Format as "Nov 15" or "15 Nov" depending on locale
+      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return '${months[date.month - 1]} ${date.day}';
     }
   }
 

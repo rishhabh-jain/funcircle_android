@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'dart:ui';
 import '/playnow/models/game_model.dart';
 import '/playnow/services/game_service.dart';
 import '/auth/firebase_auth/auth_util.dart';
@@ -26,8 +27,13 @@ class _EditGameDialogState extends State<EditGameDialog> {
   late TimeOfDay _startTime;
   late int _playersNeeded;
   late TextEditingController _descriptionController;
+  late TextEditingController _costController;
 
   bool _isSubmitting = false;
+
+  // Cost fields
+  late bool _isFree;
+  double? _costPerPlayer;
 
   @override
   void initState() {
@@ -45,11 +51,19 @@ class _EditGameDialogState extends State<EditGameDialog> {
 
     _playersNeeded = widget.game.playersNeeded;
     _descriptionController = TextEditingController(text: widget.game.description ?? '');
+
+    // Initialize cost fields
+    _isFree = widget.game.isFree;
+    _costPerPlayer = widget.game.costPerPlayer;
+    _costController = TextEditingController(
+      text: _costPerPlayer != null ? _costPerPlayer.toString() : '',
+    );
   }
 
   @override
   void dispose() {
     _descriptionController.dispose();
+    _costController.dispose();
     super.dispose();
   }
 
@@ -124,6 +138,8 @@ class _EditGameDialogState extends State<EditGameDialog> {
         description: _descriptionController.text.trim().isEmpty
             ? null
             : _descriptionController.text.trim(),
+        isFree: _isFree,
+        costPerPlayer: _costPerPlayer,
       );
 
       if (mounted) {
@@ -360,6 +376,65 @@ class _EditGameDialogState extends State<EditGameDialog> {
                           ),
                         ),
                       ),
+                      const SizedBox(height: 16),
+
+                      // Cost
+                      _buildLabel('Cost'),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildCostChip('Free', true),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildCostChip('Paid', false),
+                          ),
+                        ],
+                      ),
+                      if (!_isFree) ...[
+                        const SizedBox(height: 12),
+                        TextFormField(
+                          controller: _costController,
+                          style: const TextStyle(color: Colors.white),
+                          decoration: InputDecoration(
+                            labelText: 'Cost per player',
+                            labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
+                            prefixText: '₹',
+                            prefixStyle: const TextStyle(color: Colors.white),
+                            filled: true,
+                            fillColor: Colors.white.withValues(alpha: 0.05),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: Colors.white.withValues(alpha: 0.2),
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: Colors.white.withValues(alpha: 0.2),
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: const BorderSide(
+                                color: Colors.orange,
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                          keyboardType: TextInputType.number,
+                          onChanged: (value) {
+                            _costPerPlayer = double.tryParse(value);
+                          },
+                          validator: (value) {
+                            if (!_isFree && (value == null || value.isEmpty)) {
+                              return 'Please enter cost';
+                            }
+                            return null;
+                          },
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -445,6 +520,46 @@ class _EditGameDialogState extends State<EditGameDialog> {
           color: Colors.white,
           fontSize: 14,
           fontWeight: FontWeight.w600,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCostChip(String label, bool isFree) {
+    final isSelected = _isFree == isFree;
+    return InkWell(
+      onTap: () => setState(() => _isFree = isFree),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              gradient: isSelected
+                  ? const LinearGradient(
+                      colors: [Color(0xFFFF6B35), Color(0xFFF7931E)],
+                    )
+                  : null,
+              color: isSelected ? null : Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected
+                    ? Colors.orange.withValues(alpha: 0.5)
+                    : Colors.white.withValues(alpha: 0.15),
+                width: 1.5,
+              ),
+            ),
+            child: Center(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );

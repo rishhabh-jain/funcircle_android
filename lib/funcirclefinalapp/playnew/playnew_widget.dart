@@ -66,9 +66,11 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
   }
 
   /// Fetch user's current location
-  Future<void> _fetchUserLocation() async {
-    // First check if we have a persisted location
-    if (FFAppState().locationDisplayText.isNotEmpty &&
+  /// Set [forceRefresh] to true to bypass cached location and fetch from GPS
+  Future<void> _fetchUserLocation({bool forceRefresh = false}) async {
+    // First check if we have a persisted location (only if not forcing refresh)
+    if (!forceRefresh &&
+        FFAppState().locationDisplayText.isNotEmpty &&
         FFAppState().userLocation != null) {
       safeSetState(() {
         _model.userLocation = FFAppState().userLocation;
@@ -115,6 +117,31 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
             FFAppState().userLongitude = gurugram.longitude;
             FFAppState().locationDisplayText = 'Gurugram';
           });
+
+          // Show error if user explicitly tried to refresh
+          if (forceRefresh) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text(
+                  'Unable to get location. Please enable location services and grant permission in Settings. Using Gurugram as default.',
+                ),
+                backgroundColor: Colors.orange,
+                duration: const Duration(seconds: 4),
+                behavior: SnackBarBehavior.floating,
+                margin: const EdgeInsets.all(16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                action: SnackBarAction(
+                  label: 'Settings',
+                  textColor: Colors.white,
+                  onPressed: () async {
+                    await actions.turnOnGPS();
+                  },
+                ),
+              ),
+            );
+          }
         }
       }
     } catch (e) {
@@ -135,6 +162,42 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
           FFAppState().userLongitude = gurugram.longitude;
           FFAppState().locationDisplayText = 'Gurugram';
         });
+
+        // Show error if user explicitly tried to refresh
+        if (forceRefresh) {
+          String errorMessage = 'Unable to get your location. Using Gurugram as default.';
+
+          // Try to provide more specific error message
+          final errorStr = e.toString().toLowerCase();
+          if (errorStr.contains('permission') || errorStr.contains('denied')) {
+            errorMessage =
+                'Location permission denied. Please grant permission in Settings. Using Gurugram as default.';
+          } else if (errorStr.contains('disabled') ||
+              errorStr.contains('service')) {
+            errorMessage =
+                'Location services disabled. Please enable location in Settings. Using Gurugram as default.';
+          }
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(errorMessage),
+              backgroundColor: Colors.red,
+              duration: const Duration(seconds: 4),
+              behavior: SnackBarBehavior.floating,
+              margin: const EdgeInsets.all(16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+              action: SnackBarAction(
+                label: 'Settings',
+                textColor: Colors.white,
+                onPressed: () async {
+                  await actions.turnOnGPS();
+                },
+              ),
+            ),
+          );
+        }
       }
     }
   }
@@ -687,7 +750,24 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
                 _model.venueDurations.clear();
                 _model.lastCalculatedLocation = null;
               });
-              await _fetchUserLocation();
+              // Force refresh location from GPS
+              await _fetchUserLocation(forceRefresh: true);
+
+              // Show success feedback
+              if (mounted && _model.userLocation != null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Location updated: ${_model.locationDisplayText}'),
+                    backgroundColor: Colors.green,
+                    duration: const Duration(seconds: 2),
+                    behavior: SnackBarBehavior.floating,
+                    margin: const EdgeInsets.all(16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                );
+              }
 
               // After fetching location, recalculate and update nearest venue
               if (_allVenues.isNotEmpty && _model.userLocation != null) {
@@ -728,11 +808,22 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
                       ),
                     ],
                   ),
-                  child: Icon(
-                    Icons.my_location,
-                    color: Colors.white.withValues(alpha: 0.7),
-                    size: 18,
-                  ),
+                  child: _model.isLoadingLocation
+                      ? SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(
+                              Colors.white.withValues(alpha: 0.7),
+                            ),
+                          ),
+                        )
+                      : Icon(
+                          Icons.my_location,
+                          color: Colors.white.withValues(alpha: 0.7),
+                          size: 18,
+                        ),
                 ),
               ),
             ),
@@ -1351,103 +1442,106 @@ class _LocationSearchDialogState extends State<_LocationSearchDialog> {
       ),
       content: SizedBox(
         width: double.maxFinite,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _searchController,
-              onChanged: _searchPlaces,
-              style: FlutterFlowTheme.of(context).bodyMedium.override(
-                    fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                    color: Colors.white,
-                    letterSpacing: 0.0,
-                    useGoogleFonts:
-                        !FlutterFlowTheme.of(context).bodyMediumIsCustom,
-                  ),
-              decoration: InputDecoration(
-                hintText: 'Search for sector, city, or area',
-                hintStyle: FlutterFlowTheme.of(context).bodyMedium.override(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _searchController,
+                onChanged: _searchPlaces,
+                style: FlutterFlowTheme.of(context).bodyMedium.override(
                       fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                      color: Colors.white.withValues(alpha: 0.5),
+                      color: Colors.white,
                       letterSpacing: 0.0,
                       useGoogleFonts:
                           !FlutterFlowTheme.of(context).bodyMediumIsCustom,
                     ),
-                prefixIcon: Icon(Icons.search,
-                    color: Colors.white.withValues(alpha: 0.7)),
-                filled: true,
-                fillColor: Colors.white.withValues(alpha: 0.1),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12.0),
-                  borderSide: BorderSide.none,
+                decoration: InputDecoration(
+                  hintText: 'Search for sector, city, or area',
+                  hintStyle: FlutterFlowTheme.of(context).bodyMedium.override(
+                        fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                        color: Colors.white.withValues(alpha: 0.5),
+                        letterSpacing: 0.0,
+                        useGoogleFonts:
+                            !FlutterFlowTheme.of(context).bodyMediumIsCustom,
+                      ),
+                  prefixIcon: Icon(Icons.search,
+                      color: Colors.white.withValues(alpha: 0.7)),
+                  filled: true,
+                  fillColor: Colors.white.withValues(alpha: 0.1),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12.0),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
               ),
-            ),
-            SizedBox(height: 16.0),
-            if (_isLoading)
-              CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  FlutterFlowTheme.of(context).primary,
-                ),
-              )
-            else if (_predictions.isNotEmpty)
-              ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: 300),
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: _predictions.length,
-                  itemBuilder: (context, index) {
-                    final prediction = _predictions[index];
-                    final description = prediction['description'] ?? '';
-                    final placeId = prediction['place_id'] ?? '';
+              SizedBox(height: 16.0),
+              if (_isLoading)
+                CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    FlutterFlowTheme.of(context).primary,
+                  ),
+                )
+              else if (_predictions.isNotEmpty)
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: 300),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    physics: NeverScrollableScrollPhysics(),
+                    itemCount: _predictions.length,
+                    itemBuilder: (context, index) {
+                      final prediction = _predictions[index];
+                      final description = prediction['description'] ?? '';
+                      final placeId = prediction['place_id'] ?? '';
 
-                    return InkWell(
-                      onTap: () => _selectPlace(placeId, description),
-                      child: Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 12.0,
-                          vertical: 12.0,
-                        ),
-                        decoration: BoxDecoration(
-                          border: Border(
-                            bottom: BorderSide(
-                              color: Colors.white.withValues(alpha: 0.1),
-                              width: 1,
-                            ),
+                      return InkWell(
+                        onTap: () => _selectPlace(placeId, description),
+                        child: Container(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 12.0,
+                            vertical: 12.0,
                           ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.location_on,
-                              color: FlutterFlowTheme.of(context).primary,
-                              size: 20,
-                            ),
-                            SizedBox(width: 12),
-                            Expanded(
-                              child: Text(
-                                description,
-                                style: FlutterFlowTheme.of(context)
-                                    .bodyMedium
-                                    .override(
-                                      fontFamily: FlutterFlowTheme.of(context)
-                                          .bodyMediumFamily,
-                                      color: Colors.white,
-                                      letterSpacing: 0.0,
-                                      useGoogleFonts:
-                                          !FlutterFlowTheme.of(context)
-                                              .bodyMediumIsCustom,
-                                    ),
+                          decoration: BoxDecoration(
+                            border: Border(
+                              bottom: BorderSide(
+                                color: Colors.white.withValues(alpha: 0.1),
+                                width: 1,
                               ),
                             ),
-                          ],
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.location_on,
+                                color: FlutterFlowTheme.of(context).primary,
+                                size: 20,
+                              ),
+                              SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  description,
+                                  style: FlutterFlowTheme.of(context)
+                                      .bodyMedium
+                                      .override(
+                                        fontFamily: FlutterFlowTheme.of(context)
+                                            .bodyMediumFamily,
+                                        color: Colors.white,
+                                        letterSpacing: 0.0,
+                                        useGoogleFonts:
+                                            !FlutterFlowTheme.of(context)
+                                                .bodyMediumIsCustom,
+                                      ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

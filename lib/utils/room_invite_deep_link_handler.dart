@@ -1,8 +1,9 @@
+import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
-import 'package:firebase_dynamic_links/firebase_dynamic_links.dart';
 import '../screens/chat/join_room_screen.dart';
 
 /// Handles deep links for room invites
+/// Supports custom URL scheme: funcircle://room/join/{invite_code}
 class RoomInviteDeepLinkHandler {
   static final RoomInviteDeepLinkHandler _instance =
       RoomInviteDeepLinkHandler._internal();
@@ -11,76 +12,80 @@ class RoomInviteDeepLinkHandler {
 
   RoomInviteDeepLinkHandler._internal();
 
-  /// Initialize deep link handling
-  /// Call this in main.dart after runApp
-  Future<void> initialize(GlobalKey<NavigatorState> navigatorKey) async {
-    // Handle links when app is in foreground
-    FirebaseDynamicLinks.instance.onLink.listen(
-      (dynamicLinkData) {
-        _handleDynamicLink(dynamicLinkData, navigatorKey);
-      },
-      onError: (error) {
-        print('Dynamic link error: $error');
-      },
-    );
+  final _appLinks = AppLinks();
+  bool _initialized = false;
 
-    // Handle link that opened the app
-    final initialLink = await FirebaseDynamicLinks.instance.getInitialLink();
-    if (initialLink != null) {
-      _handleDynamicLink(initialLink, navigatorKey);
+  /// Initialize deep link handling
+  /// Call this in main.dart after app initialization
+  Future<void> initialize(BuildContext context) async {
+    if (_initialized) return;
+    _initialized = true;
+
+    try {
+      // Handle initial link if app was launched via deep link
+      final initialUri = await _appLinks.getInitialLink();
+      if (initialUri != null) {
+        _handleDeepLink(initialUri, context);
+      }
+
+      // Listen to incoming links while app is running
+      _appLinks.uriLinkStream.listen(
+        (uri) {
+          _handleDeepLink(uri, context);
+        },
+        onError: (err) {
+          print('Room invite deep link error: $err');
+        },
+      );
+    } catch (e) {
+      print('Error initializing room invite deep links: $e');
     }
   }
 
-  /// Handle a dynamic link
-  void _handleDynamicLink(
-    PendingDynamicLinkData dynamicLinkData,
-    GlobalKey<NavigatorState> navigatorKey,
-  ) {
-    final deepLink = dynamicLinkData.link;
+  /// Handle a deep link URI
+  void _handleDeepLink(Uri uri, BuildContext context) {
+    print('Received room invite deep link: $uri');
 
     // Check if it's a room invite link
-    // Format: https://funcircle.app/room/join/{invite_code}
-    if (deepLink.pathSegments.length >= 3 &&
-        deepLink.pathSegments[0] == 'room' &&
-        deepLink.pathSegments[1] == 'join') {
-      final inviteCode = deepLink.pathSegments[2];
-      _navigateToJoinRoom(inviteCode, navigatorKey);
+    // Format: funcircle://room/join/{invite_code}
+    if (uri.scheme == 'funcircle' && uri.host == 'room') {
+      final pathSegments = uri.pathSegments;
+
+      // Check for join action with invite code
+      if (pathSegments.length >= 2 && pathSegments[0] == 'join') {
+        final inviteCode = pathSegments[1];
+        _navigateToJoinRoom(inviteCode, context);
+      } else {
+        print('Invalid room invite link format');
+      }
+    } else {
+      print('Not a room invite deep link: ${uri.scheme}://${uri.host}${uri.path}');
     }
   }
 
   /// Navigate to join room screen
-  void _navigateToJoinRoom(
-    String inviteCode,
-    GlobalKey<NavigatorState> navigatorKey,
-  ) {
-    navigatorKey.currentState?.push(
-      MaterialPageRoute(
-        builder: (context) => JoinRoomScreen(inviteCode: inviteCode),
-      ),
-    );
+  void _navigateToJoinRoom(String inviteCode, BuildContext context) {
+    print('Navigating to join room with code: $inviteCode');
+
+    try {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => JoinRoomScreen(inviteCode: inviteCode),
+        ),
+      );
+    } catch (e) {
+      print('Error navigating to join room: $e');
+    }
   }
 
-  /// Handle custom URL scheme links (for iOS universal links)
-  /// Format: funcircle://room/join/{invite_code}
-  Future<bool> handleCustomSchemeUrl(
-    String url,
-    GlobalKey<NavigatorState> navigatorKey,
-  ) async {
+  /// Manually handle a deep link URL (for testing or custom handling)
+  Future<bool> handleUrl(String url, BuildContext context) async {
     try {
       final uri = Uri.parse(url);
-
-      if (uri.scheme == 'funcircle' &&
-          uri.pathSegments.length >= 3 &&
-          uri.pathSegments[0] == 'room' &&
-          uri.pathSegments[1] == 'join') {
-        final inviteCode = uri.pathSegments[2];
-        _navigateToJoinRoom(inviteCode, navigatorKey);
-        return true;
-      }
-
-      return false;
+      _handleDeepLink(uri, context);
+      return true;
     } catch (e) {
-      print('Error handling custom URL: $e');
+      print('Error handling room invite URL: $e');
       return false;
     }
   }

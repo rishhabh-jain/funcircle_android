@@ -412,12 +412,17 @@ class _SingleVenueNewWidgetState extends State<SingleVenueNewWidget> {
               ? '\n\n${venue.description}'
               : '';
 
+      // Create deep link URL
+      final deepLink = 'funcircle://venue/${venue.id}';
+
       // Create shareable text
       final shareText = '''
 Check out this venue on FunCircle!
 
 🏟️ $venueName
 📍 $location$price$description
+
+🔗 Tap to view directly: $deepLink
 
 Download FunCircle app to book your slot!
 ''';
@@ -426,13 +431,32 @@ Download FunCircle app to book your slot!
         shareText,
         subject: 'Check out $venueName on FunCircle',
       );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Venue shared successfully!'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
     } catch (e) {
       print('Error sharing venue: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Unable to share at this time'),
+          SnackBar(
+            content: const Text('Unable to share at this time'),
             backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
         );
       }

@@ -3,6 +3,7 @@ import '../models/player_request_model.dart';
 import '../models/user_location_model.dart';
 import '../models/venue_marker_model.dart';
 import '../models/game_session_model.dart';
+import '../../playnow/models/game_model.dart';
 
 /// Service class for map-related database operations
 class MapService {
@@ -161,6 +162,7 @@ class MapService {
     String sportType,
   ) async {
     try {
+      final now = DateTime.now();
       final response = await _client
           .schema('findplayers')
           .schema('findplayers')
@@ -183,7 +185,8 @@ class MapService {
           ''')
           .eq('status', 'active')
           .eq('sport_type', sportType)
-          .gt('expires_at', DateTime.now().toIso8601String());
+          .gt('expires_at', now.toIso8601String())
+          .gt('scheduled_time', now.toIso8601String()); // Filter out past scheduled games
 
       // Fetch user details separately for each request
       final List<PlayerRequestModel> requests = [];
@@ -288,6 +291,159 @@ class MapService {
     }
   }
 
+  /// Check if user has already responded to a request
+  static Future<bool> hasUserRespondedToRequest({
+    required String requestId,
+    required String userId,
+  }) async {
+    try {
+      final response = await _client
+          .schema('findplayers')
+          .from('player_request_responses')
+          .select('id')
+          .eq('request_id', requestId)
+          .eq('responder_id', userId)
+          .maybeSingle();
+
+      return response != null;
+    } catch (e) {
+      print('Error checking user response: $e');
+      return false;
+    }
+  }
+
+  /// Get list of users who showed interest in a request
+  static Future<List<Map<String, dynamic>>> getInterestedUsers({
+    required String requestId,
+  }) async {
+    try {
+      final responses = await _client
+          .schema('findplayers')
+          .from('player_request_responses')
+          .select('responder_id, created_at, message')
+          .eq('request_id', requestId)
+          .order('created_at', ascending: false);
+
+      // Fetch user details for each responder
+      final List<Map<String, dynamic>> interestedUsers = [];
+      for (final response in (responses as List)) {
+        final responderId = response['responder_id'] as String?;
+        if (responderId != null) {
+          try {
+            final userData = await _client
+                .from('users')
+                .select('user_id, first_name, profile_picture')
+                .eq('user_id', responderId)
+                .maybeSingle();
+
+            if (userData != null) {
+              interestedUsers.add({
+                'user_id': responderId,
+                'first_name': userData['first_name'],
+                'profile_picture': userData['profile_picture'],
+                'message': response['message'],
+                'responded_at': response['created_at'],
+              });
+            }
+          } catch (e) {
+            print('Error fetching user $responderId: $e');
+          }
+        }
+      }
+
+      return interestedUsers;
+    } catch (e) {
+      print('Error getting interested users: $e');
+      return [];
+    }
+  }
+
+  /// Find or create a 1-on-1 chat room between two users
+  static Future<String?> findOrCreateChatRoom({
+    required String userId1,
+    required String userId2,
+  }) async {
+    try {
+      // First, try to find an existing single chat room between these two users
+      // Get all rooms where both users are members
+      final user1Rooms = await _client
+          .schema('chat')
+          .from('room_members')
+          .select('room_id')
+          .eq('user_id', userId1);
+
+      final user2Rooms = await _client
+          .schema('chat')
+          .from('room_members')
+          .select('room_id')
+          .eq('user_id', userId2);
+
+      // Find common room IDs
+      final user1RoomIds = (user1Rooms as List).map((r) => r['room_id'] as String).toSet();
+      final user2RoomIds = (user2Rooms as List).map((r) => r['room_id'] as String).toSet();
+      final commonRoomIds = user1RoomIds.intersection(user2RoomIds);
+
+      // Check if any of the common rooms is a single type room
+      for (final roomId in commonRoomIds) {
+        final room = await _client
+            .schema('chat')
+            .from('rooms')
+            .select('id, type')
+            .eq('id', roomId)
+            .eq('type', 'single')
+            .maybeSingle();
+
+        if (room != null) {
+          return room['id'] as String;
+        }
+      }
+
+      // No existing room found, create a new one
+      // Get the other user's name for the room name
+      final otherUserData = await _client
+          .from('users')
+          .select('first_name')
+          .eq('user_id', userId2)
+          .maybeSingle();
+
+      final newRoom = await _client
+          .schema('chat')
+          .from('rooms')
+          .insert({
+            'type': 'single',
+            'created_by': userId1,
+            'is_active': true,
+            'name': otherUserData?['first_name'] ?? 'Chat',
+          })
+          .select('id')
+          .single();
+
+      final roomId = newRoom['id'] as String;
+
+      // Add both users as members
+      await _client
+          .schema('chat')
+          .from('room_members')
+          .insert([
+            {
+              'room_id': roomId,
+              'user_id': userId1,
+              'role': 'member',
+            },
+            {
+              'room_id': roomId,
+              'user_id': userId2,
+              'role': 'member',
+            },
+          ]);
+
+      return roomId;
+    } catch (e) {
+      print('Error finding or creating chat room: $e');
+      return null;
+    }
+  }
+
   /// Create an organized game in playnow schema (for 3+ players)
   static Future<String?> createGame({
     required String creatorId,
@@ -337,9 +493,28 @@ class MapService {
         'is_mixed_only': isMixedOnly,
         'description': description,
         'status': 'open',
-      }).select('id').single();
+      }).select().single();
 
       final gameId = response['id'] as String;
+
+      // Create Game object for chat room creation
+      final game = Game.fromJson(response);
+
+      // Create chat room for the game
+      String? chatRoomId;
+      try {
+        chatRoomId = await _createGameChatRoom(game);
+        if (chatRoomId != null) {
+          // Update game with chat_room_id
+          await _client.schema('playnow').from('games')
+              .update({'chat_room_id': chatRoomId})
+              .eq('id', gameId);
+          print('✓ Chat room created and linked to game from FindPlayers');
+        }
+      } catch (e) {
+        print('✗ Error creating chat room from FindPlayers: $e');
+        // Don't fail if chat room creation fails
+      }
 
       // Add creator as first participant
       await _client.schema('playnow').from('game_participants').insert({
@@ -348,6 +523,15 @@ class MapService {
         'join_type': 'creator',
         'payment_status': isFree ? 'waived' : 'pending',
       });
+
+      // Add creator to chat room
+      if (chatRoomId != null) {
+        try {
+          await _addUserToChatRoom(gameId, creatorId);
+        } catch (e) {
+          print('✗ Error adding creator to chat room: $e');
+        }
+      }
 
       return gameId;
     } catch (e) {
@@ -363,6 +547,10 @@ class MapService {
     String sportType,
   ) async {
     try {
+      // Get today's date in YYYY-MM-DD format to filter out past games
+      final today = DateTime.now();
+      final todayString = '${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+
       final response = await _client.schema('playnow').from('games').select('''
             id,
             created_by,
@@ -383,7 +571,10 @@ class MapService {
             description,
             status,
             created_at
-          ''').eq('sport_type', sportType).inFilter('status', ['open']);
+          ''')
+          .eq('sport_type', sportType)
+          .inFilter('status', ['open'])
+          .gte('game_date', todayString); // Filter out past games
 
       // Fetch creator details separately for each game
       final List<Map<String, dynamic>> games = [];
@@ -740,5 +931,79 @@ class MapService {
           .map((json) => GameSessionModel.fromJson(json))
           .toList();
     });
+  }
+
+  // ==================== CHAT ROOM HELPERS ====================
+
+  /// Create chat room for a PlayNow game
+  static Future<String?> _createGameChatRoom(Game game) async {
+    try {
+      // Generate room name from game details
+      final roomName = '${game.autoTitle} - ${_formatGameDate(game.gameDate)}';
+
+      final result = await _client.schema('chat').from('rooms').insert({
+        'name': roomName,
+        'type': 'group',
+        'sport_type': game.sportType,
+        'meta_data': {'game_id': game.id},
+        'created_at': DateTime.now().toIso8601String(),
+      }).select('id').single();
+
+      print('Chat room created with name: $roomName');
+      return result['id'] as String;
+    } catch (e) {
+      print('Error creating game chat room: $e');
+      return null;
+    }
+  }
+
+  /// Format game date as "Today", "Tomorrow", or "Nov 15"
+  static String _formatGameDate(DateTime date) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final tomorrow = today.add(Duration(days: 1));
+    final gameDay = DateTime(date.year, date.month, date.day);
+
+    if (gameDay == today) {
+      return 'Today';
+    } else if (gameDay == tomorrow) {
+      return 'Tomorrow';
+    } else {
+      final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return '${months[date.month - 1]} ${date.day}';
+    }
+  }
+
+  /// Add user to game's chat room
+  static Future<void> _addUserToChatRoom(String gameId, String userId) async {
+    try {
+      // Get chat room ID from game
+      final gameData = await _client
+          .schema('playnow').from('games')
+          .select('chat_room_id')
+          .eq('id', gameId)
+          .maybeSingle();
+
+      final chatRoomId = gameData?['chat_room_id'];
+      if (chatRoomId != null) {
+        // Check if user is already a member
+        final existing = await _client.schema('chat').from('room_members')
+            .select('id')
+            .eq('room_id', chatRoomId)
+            .eq('user_id', userId)
+            .maybeSingle();
+
+        if (existing == null) {
+          await _client.schema('chat').from('room_members').insert({
+            'room_id': chatRoomId,
+            'user_id': userId,
+            'role': 'member',
+            'joined_at': DateTime.now().toIso8601String(),
+          });
+        }
+      }
+    } catch (e) {
+      print('Error adding user to chat room: $e');
+    }
   }
 }

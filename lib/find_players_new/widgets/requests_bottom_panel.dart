@@ -203,23 +203,7 @@ class _RequestsBottomPanelState extends State<RequestsBottomPanel>
   Widget build(BuildContext context) {
     final totalItems = widget.requests.length + widget.sessions.length + widget.playNowGames.length;
 
-    return GestureDetector(
-      onVerticalDragUpdate: (details) {
-        if (details.primaryDelta! < -10) {
-          // Swipe up
-          if (_sheetState == SheetState.minimized || _sheetState == SheetState.collapsed) {
-            _toggleExpand();
-          }
-        } else if (details.primaryDelta! > 10) {
-          // Swipe down
-          if (_sheetState == SheetState.expanded) {
-            _toggleExpand();
-          } else if (_sheetState == SheetState.collapsed) {
-            _minimizeSheet();
-          }
-        }
-      },
-      child: AnimatedContainer(
+    return AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
         height: _sheetState == SheetState.minimized
@@ -250,244 +234,292 @@ class _RequestsBottomPanelState extends State<RequestsBottomPanel>
                 ],
               ),
               // Add a top border separately
-              child: SingleChildScrollView(
-                child: Column(
-                  children: [
-                  Container(
-                    height: 1,
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [
-                          Colors.white.withValues(alpha: 0.0),
-                          Colors.white.withValues(alpha: 0.1),
-                          Colors.white.withValues(alpha: 0.0),
-                        ],
-                      ),
+              child: _isMinimized
+                  ? _buildMinimizedView(totalItems)
+                  : _buildExpandedCollapsedView(totalItems),
+            ),
+          ),
+        ),
+    );
+  }
+
+  /// Build minimized view - just drag handle and game count
+  Widget _buildMinimizedView(int totalItems) {
+    return GestureDetector(
+      onTap: () {
+        // Tap anywhere to expand
+        _toggleExpand();
+      },
+      onVerticalDragEnd: (details) {
+        // Swipe up to expand
+        if (details.primaryVelocity != null && details.primaryVelocity! < -300) {
+          _toggleExpand();
+        }
+      },
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            height: 1,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  Colors.white.withValues(alpha: 0.0),
+                  Colors.white.withValues(alpha: 0.1),
+                  Colors.white.withValues(alpha: 0.0),
+                ],
+              ),
+            ),
+          ),
+          // Drag handle
+          Container(
+            margin: const EdgeInsets.only(top: 8, bottom: 4),
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          // Game count
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '$totalItems ${totalItems == 1 ? 'game' : 'games'} nearby',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Icon(
+                  Icons.expand_less,
+                  color: Colors.white.withValues(alpha: 0.6),
+                  size: 20,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Build expanded/collapsed view - full UI
+  Widget _buildExpandedCollapsedView(int totalItems) {
+    return Column(
+      children: [
+        // Draggable header area with gesture detection
+        GestureDetector(
+          onVerticalDragEnd: (details) {
+            // Swipe down
+            if (details.primaryVelocity != null && details.primaryVelocity! > 300) {
+              if (_sheetState == SheetState.expanded) {
+                _toggleExpand(); // Collapse
+              } else if (_sheetState == SheetState.collapsed) {
+                _minimizeSheet(); // Minimize
+              }
+            }
+            // Swipe up
+            else if (details.primaryVelocity != null && details.primaryVelocity! < -300) {
+              if (_sheetState == SheetState.collapsed) {
+                _toggleExpand(); // Expand
+              }
+            }
+          },
+          behavior: HitTestBehavior.opaque,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                height: 1,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.white.withValues(alpha: 0.0),
+                      Colors.white.withValues(alpha: 0.1),
+                      Colors.white.withValues(alpha: 0.0),
+                    ],
+                  ),
+                ),
+              ),
+              // Drag handle
+              Container(
+                margin: const EdgeInsets.only(top: 8, bottom: 8),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.3),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+
+              // Header
+              Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Open Games',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-                  // Drag handle
-                  Container(
-                    margin: const EdgeInsets.only(top: 12, bottom: 8),
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.3),
-                      borderRadius: BorderRadius.circular(2),
+                  const SizedBox(height: 4),
+                  Text(
+                    '$totalItems ${totalItems == 1 ? 'game' : 'games'} nearby',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.6),
+                      fontSize: 14,
                     ),
                   ),
-
-                  // Minimized state - Just show count and tap hint
-                  if (_isMinimized) ...[
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            '$totalItems ${totalItems == 1 ? 'game' : 'games'} nearby',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.9),
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          Icon(
-                            Icons.expand_less,
-                            color: Colors.white.withValues(alpha: 0.6),
-                            size: 20,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-
-                  // Collapsed/Expanded state - Full UI
-                  if (!_isMinimized) ...[
-
-                  // Header
-                  Padding(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Open Games',
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '$totalItems ${totalItems == 1 ? 'game' : 'games'} nearby',
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.6),
-                                fontSize: 14,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Row(
-                          children: [
-                            // Minimize button
-                            _buildGlassIconButton(
-                              icon: Icons.minimize,
-                              onPressed: _minimizeSheet,
-                            ),
-                            const SizedBox(width: 8),
-                            // Expand/collapse button
-                            _buildGlassIconButton(
-                              icon: _isExpanded
-                                  ? Icons.expand_more
-                                  : Icons.expand_less,
-                              onPressed: _toggleExpand,
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
+                ],
+              ),
+              Row(
+                children: [
+                  // Minimize button
+                  _buildGlassIconButton(
+                    icon: Icons.minimize,
+                    onPressed: _minimizeSheet,
                   ),
+                  const SizedBox(width: 8),
+                  // Expand/collapse button
+                  _buildGlassIconButton(
+                    icon: _isExpanded ? Icons.expand_more : Icons.expand_less,
+                    onPressed: _toggleExpand,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+            ],
+          ),
+        ),
 
-                  const SizedBox(height: 12),
+        const SizedBox(height: 12),
 
-                  // Search bar (always visible, compact when collapsed)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Container(
-                      height: _isExpanded ? null : 42, // Compact height when collapsed
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(_isExpanded ? 12 : 21),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.2),
+        // Search bar
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Container(
+            height: _isExpanded ? null : 42,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(_isExpanded ? 12 : 21),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.2),
+              ),
+            ),
+            child: TextField(
+              controller: _searchController,
+              onChanged: (value) {
+                setState(() {
+                  _searchQuery = value;
+                });
+              },
+              onTap: !_isExpanded ? () => _toggleExpand() : null,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: _isExpanded ? 15 : 14,
+              ),
+              decoration: InputDecoration(
+                hintText: _isExpanded ? 'Search games, players...' : 'Search...',
+                hintStyle: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.5),
+                  fontSize: _isExpanded ? 15 : 14,
+                ),
+                prefixIcon: Icon(
+                  Icons.search,
+                  size: _isExpanded ? 22 : 20,
+                  color: Colors.white.withValues(alpha: 0.6),
+                ),
+                suffixIcon: _searchQuery.isNotEmpty
+                    ? IconButton(
+                        icon: Icon(
+                          Icons.clear,
+                          size: _isExpanded ? 22 : 20,
+                          color: Colors.white.withValues(alpha: 0.6),
                         ),
-                      ),
-                      child: TextField(
-                        controller: _searchController,
-                        onChanged: (value) {
+                        onPressed: () {
+                          _searchController.clear();
                           setState(() {
-                            _searchQuery = value;
+                            _searchQuery = '';
                           });
                         },
-                        onTap: !_isExpanded
-                            ? () {
-                                // Auto-expand when tapping search in collapsed state
-                                _toggleExpand();
-                              }
-                            : null,
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: _isExpanded ? 15 : 14,
-                        ),
-                        decoration: InputDecoration(
-                          hintText: _isExpanded
-                              ? 'Search games, players...'
-                              : 'Search...',
-                          hintStyle: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.5),
-                            fontSize: _isExpanded ? 15 : 14,
-                          ),
-                          prefixIcon: Icon(
-                            Icons.search,
-                            size: _isExpanded ? 22 : 20,
-                            color: Colors.white.withValues(alpha: 0.6),
-                          ),
-                          suffixIcon: _searchQuery.isNotEmpty
-                              ? IconButton(
-                                  icon: Icon(
-                                    Icons.clear,
-                                    size: _isExpanded ? 22 : 20,
-                                    color: Colors.white.withValues(alpha: 0.6),
-                                  ),
-                                  onPressed: () {
-                                    _searchController.clear();
-                                    setState(() {
-                                      _searchQuery = '';
-                                    });
-                                  },
-                                )
-                              : null,
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.symmetric(
-                            horizontal: _isExpanded ? 16 : 12,
-                            vertical: _isExpanded ? 12 : 10,
-                          ),
-                          isDense: !_isExpanded,
-                        ),
-                      ),
-                    ),
-                  ),
-
-                  // Filters (only when expanded)
-                  if (_isExpanded) ...[
-                    const SizedBox(height: 12),
-                    SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Row(
-                        children: [
-                          // Distance filter
-                          _buildFilterChip(
-                            label: _maxDistance == null
-                                ? 'Distance'
-                                : '${_maxDistance!.toStringAsFixed(0)} km',
-                            icon: Icons.near_me,
-                            isActive: _maxDistance != null,
-                            onTap: () => _showDistanceFilter(),
-                          ),
-                          const SizedBox(width: 8),
-
-                          // Skill level filter
-                          _buildFilterChip(
-                            label: _selectedSkillLevel == null
-                                ? 'Skill Level'
-                                : SkillLevel.fromValue(_selectedSkillLevel!)
-                                    .label,
-                            icon: Icons.bar_chart,
-                            isActive: _selectedSkillLevel != null,
-                            onTap: () => _showSkillLevelFilter(),
-                          ),
-                          const SizedBox(width: 8),
-
-                          // Clear filters button
-                          if (_maxDistance != null || _selectedSkillLevel != null)
-                            _buildFilterChip(
-                              label: 'Clear',
-                              icon: Icons.clear_all,
-                              isActive: false,
-                              onTap: () {
-                                setState(() {
-                                  _maxDistance = null;
-                                  _selectedSkillLevel = null;
-                                });
-                              },
-                            ),
-                        ],
-                      ),
-                    ),
-                  ],
-
-                  const SizedBox(height: 12),
-
-                  // Scrollable content
-                  Expanded(
-                    child: _isExpanded
-                        ? _buildExpandedList()
-                        : _buildHorizontalScroll(),
-                  ),
-                  ], // End of if (!_isMinimized)
-                ],
+                      )
+                    : null,
+                border: InputBorder.none,
+                contentPadding: EdgeInsets.symmetric(
+                  horizontal: _isExpanded ? 16 : 12,
+                  vertical: _isExpanded ? 12 : 10,
                 ),
+                isDense: !_isExpanded,
               ),
             ),
           ),
         ),
-      ),
+
+        // Filters (only when expanded)
+        if (_isExpanded) ...[
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                _buildFilterChip(
+                  label: _maxDistance == null
+                      ? 'Distance'
+                      : '${_maxDistance!.toStringAsFixed(0)} km',
+                  icon: Icons.near_me,
+                  isActive: _maxDistance != null,
+                  onTap: () => _showDistanceFilter(),
+                ),
+                const SizedBox(width: 8),
+                _buildFilterChip(
+                  label: _selectedSkillLevel == null
+                      ? 'Skill Level'
+                      : SkillLevel.fromValue(_selectedSkillLevel!).label,
+                  icon: Icons.bar_chart,
+                  isActive: _selectedSkillLevel != null,
+                  onTap: () => _showSkillLevelFilter(),
+                ),
+                const SizedBox(width: 8),
+                if (_maxDistance != null || _selectedSkillLevel != null)
+                  _buildFilterChip(
+                    label: 'Clear',
+                    icon: Icons.clear_all,
+                    isActive: false,
+                    onTap: () {
+                      setState(() {
+                        _maxDistance = null;
+                        _selectedSkillLevel = null;
+                      });
+                    },
+                  ),
+              ],
+            ),
+          ),
+        ],
+
+        const SizedBox(height: 12),
+
+        // Scrollable content
+        Expanded(
+          child: _isExpanded ? _buildExpandedList() : _buildHorizontalScroll(),
+        ),
+      ],
     );
   }
 
@@ -557,38 +589,106 @@ class _RequestsBottomPanelState extends State<RequestsBottomPanel>
     );
   }
 
-  /// Build horizontal scrolling row (collapsed state)
+  /// Build horizontal scrolling row (collapsed state) with lazy loading
   Widget _buildHorizontalScroll() {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          // Player requests (sorted by distance)
-          ..._sortedRequests.map((request) => Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: _buildRequestCard(request, isHorizontal: true),
-              )),
+    // Combine all items into a single list for efficient horizontal scrolling
+    final allItems = <dynamic>[
+      ..._sortedRequests,
+      ..._sortedPlayNowGames,
+      ..._sortedSessions,
+    ];
 
-          // PlayNow games (sorted by date)
-          ..._sortedPlayNowGames.map((game) => Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: _buildPlayNowGameCard(game, isHorizontal: true),
-              )),
+    if (allItems.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text(
+            'No games available',
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.6),
+              fontSize: 14,
+            ),
+          ),
+        ),
+      );
+    }
 
-          // Game sessions (sorted by distance)
-          ..._sortedSessions.map((session) => Padding(
-                padding: const EdgeInsets.only(right: 12),
-                child: _buildSessionCard(session, isHorizontal: true),
-              )),
-        ],
+    return SizedBox(
+      height: 260, // Fixed height for horizontal scroll
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        itemCount: allItems.length,
+        physics: const BouncingScrollPhysics(),
+        itemBuilder: (context, index) {
+          final item = allItems[index];
+
+          Widget card;
+          if (item is PlayerRequestModel) {
+            card = _buildRequestCard(item, isHorizontal: true);
+          } else if (item is Map<String, dynamic>) {
+            card = _buildPlayNowGameCard(item, isHorizontal: true);
+          } else if (item is GameSessionModel) {
+            card = _buildSessionCard(item, isHorizontal: true);
+          } else {
+            return const SizedBox.shrink();
+          }
+
+          return Padding(
+            padding: EdgeInsets.only(
+              right: index == allItems.length - 1 ? 0 : 12,
+            ),
+            child: card,
+          );
+        },
       ),
     );
   }
 
   /// Build vertical list (expanded state)
   Widget _buildExpandedList() {
+    final hasAnyGames = _sortedRequests.isNotEmpty ||
+        _sortedPlayNowGames.isNotEmpty ||
+        _sortedSessions.isNotEmpty;
+
+    if (!hasAnyGames) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.sports_tennis,
+                size: 64,
+                color: Colors.white.withValues(alpha: 0.3),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'No games available',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.6),
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Check back later or create a new game request',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.4),
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return ListView(
+      physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 16),
       children: [
         // Player requests section

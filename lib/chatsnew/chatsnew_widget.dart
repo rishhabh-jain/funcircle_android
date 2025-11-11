@@ -5,6 +5,7 @@ import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/flutter_flow/form_field_controller.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'chatsnew_model.dart';
 export 'chatsnew_model.dart';
@@ -260,12 +261,86 @@ class _ChatsnewWidgetState extends State<ChatsnewWidget> {
             print('DEBUG: Error checking user messages for room $roomId: $messageError');
           }
 
+          // For single chats, fetch the other user's name and profile picture
+          String? otherUserName;
+          String? otherUserProfilePicture;
+          final roomType = roomData['type'] as String?;
+          if (roomType == 'single') {
+            try {
+              // Get all members of this room
+              final membersResponse = await SupaFlow.client
+                  .schema('chat')
+                  .from('room_members')
+                  .select('user_id')
+                  .eq('room_id', roomId);
+
+              // Find the other user (not current user)
+              final members = (membersResponse as List);
+              String? otherUserId;
+              for (final member in members) {
+                final userId = member['user_id'];
+                if (userId != currentUserUid) {
+                  otherUserId = userId;
+                  break;
+                }
+              }
+
+              if (otherUserId != null) {
+                // Fetch other user's name and profile picture
+                final userResponse = await SupaFlow.client
+                    .from('users')
+                    .select('first_name, profile_picture')
+                    .eq('user_id', otherUserId)
+                    .maybeSingle();
+
+                if (userResponse != null) {
+                  otherUserName = userResponse['first_name'];
+                  otherUserProfilePicture = userResponse['profile_picture'];
+                }
+              }
+            } catch (e) {
+              print('DEBUG: Error fetching other user details: $e');
+            }
+          }
+
+          // Check for unread messages
+          int unreadCount = 0;
+          try {
+            final unreadResponse = await SupaFlow.client
+                .schema('chat')
+                .from('messages')
+                .select('id')
+                .eq('room_id', roomId)
+                .neq('sender_id', currentUserUid)
+                .eq('is_deleted', false);
+
+            final messageIds = (unreadResponse as List).map((m) => m['id'] as String).toList();
+
+            if (messageIds.isNotEmpty) {
+              // Check which messages are unread
+              final readStatusResponse = await SupaFlow.client
+                  .schema('chat')
+                  .from('message_read_status')
+                  .select('message_id')
+                  .inFilter('message_id', messageIds)
+                  .eq('user_id', currentUserUid);
+
+              final readMessageIds = (readStatusResponse as List).map((r) => r['message_id'] as String).toSet();
+              unreadCount = messageIds.where((id) => !readMessageIds.contains(id)).length;
+            }
+          } catch (e) {
+            print('DEBUG: Error checking unread messages: $e');
+          }
+
           roomDetailsMap[roomId] = {
             'venueImages': venueImages,
             'groupId': groupId,
             'lastMessage': lastMessage,
             'lastMessageTime': lastMessageTime,
             'userHasMessaged': userHasMessaged,
+            'otherUserName': otherUserName,
+            'otherUserProfilePicture': otherUserProfilePicture,
+            'unreadCount': unreadCount,
           };
         } catch (roomError) {
           print('DEBUG: Error processing room: $roomError');
@@ -547,33 +622,38 @@ class _ChatsnewWidgetState extends State<ChatsnewWidget> {
                                   _model.choiceChipsValue!.isNotEmpty) {
                                 final selectedFilter = _model.choiceChipsValue!.toLowerCase();
 
-                                // PlayTime filter - show only game chat rooms where user has messaged
-                                if (selectedFilter == 'playtime') {
-                                  final metaData = room.metaData;
-                                  final hasGameId = metaData is Map &&
-                                      metaData.containsKey('game_id') &&
-                                      metaData['game_id'] != null;
+                                // Always show single type rooms (1-on-1 chats) regardless of filter
+                                final isSingleChat = room.type == 'single';
 
-                                  final userHasMessaged = roomDetails?['userHasMessaged'] as bool? ?? false;
+                                if (!isSingleChat) {
+                                  // PlayTime filter - show only game chat rooms where user has messaged
+                                  if (selectedFilter == 'playtime') {
+                                    final metaData = room.metaData;
+                                    final hasGameId = metaData is Map &&
+                                        metaData.containsKey('game_id') &&
+                                        metaData['game_id'] != null;
 
-                                  // Only show if it's a game chat AND user has sent messages
-                                  if (!hasGameId || !userHasMessaged) {
-                                    return SizedBox.shrink();
-                                  }
-                                } else {
-                                  // Sport type filters
-                                  int? expectedGroupId;
+                                    final userHasMessaged = roomDetails?['userHasMessaged'] as bool? ?? false;
 
-                                  if (selectedFilter.contains('badminton')) {
-                                    expectedGroupId = 90;
-                                  } else if (selectedFilter.contains('pickleball')) {
-                                    expectedGroupId = 104;
-                                  } else if (selectedFilter.contains('padel')) {
-                                    expectedGroupId = 105;
-                                  }
+                                    // Only show if it's a game chat AND user has sent messages
+                                    if (!hasGameId || !userHasMessaged) {
+                                      return SizedBox.shrink();
+                                    }
+                                  } else {
+                                    // Sport type filters
+                                    int? expectedGroupId;
 
-                                  if (expectedGroupId != null && groupId != expectedGroupId) {
-                                    return SizedBox.shrink();
+                                    if (selectedFilter.contains('badminton')) {
+                                      expectedGroupId = 90;
+                                    } else if (selectedFilter.contains('pickleball')) {
+                                      expectedGroupId = 104;
+                                    } else if (selectedFilter.contains('padel')) {
+                                      expectedGroupId = 105;
+                                    }
+
+                                    if (expectedGroupId != null && groupId != expectedGroupId) {
+                                      return SizedBox.shrink();
+                                    }
                                   }
                                 }
                               }
@@ -582,7 +662,7 @@ class _ChatsnewWidgetState extends State<ChatsnewWidget> {
                                 color: Colors.transparent,
                                 child: InkWell(
                                   onTap: () async {
-                                    context.pushNamed(
+                                    final result = await context.pushNamed(
                                       'ChatRoom',
                                       queryParameters: {
                                         'roomId': serializeParam(
@@ -591,6 +671,11 @@ class _ChatsnewWidgetState extends State<ChatsnewWidget> {
                                         ),
                                       }.withoutNulls,
                                     );
+
+                                    // Refresh if room was left
+                                    if (result == 'room_left' && mounted) {
+                                      await _fetchChatRooms();
+                                    }
                                   },
                                   child: Container(
                                     padding: EdgeInsetsDirectional.fromSTEB(
@@ -630,6 +715,36 @@ class _ChatsnewWidgetState extends State<ChatsnewWidget> {
                                             shape: BoxShape.circle,
                                           ),
                                           child: (() {
+                                            // For single chats, prioritize other user's profile picture
+                                            if (room.type == 'single') {
+                                              final roomInfo = _model.chatRoomDetails?[room.id] as Map<String, dynamic>?;
+                                              final otherUserProfilePic = roomInfo?['otherUserProfilePicture'];
+                                              if (otherUserProfilePic != null && otherUserProfilePic is String && otherUserProfilePic.isNotEmpty) {
+                                                return ClipOval(
+                                                  child: CachedNetworkImage(
+                                                    imageUrl: otherUserProfilePic,
+                                                    width: 56.0,
+                                                    height: 56.0,
+                                                    fit: BoxFit.cover,
+                                                    errorWidget: (context, url, error) {
+                                                      return Icon(
+                                                        Icons.person_rounded,
+                                                        color: Colors.white,
+                                                        size: 28.0,
+                                                      );
+                                                    },
+                                                  ),
+                                                );
+                                              } else {
+                                                return Icon(
+                                                  Icons.person_rounded,
+                                                  color: Colors.white,
+                                                  size: 28.0,
+                                                );
+                                              }
+                                            }
+
+                                            // For group chats, prioritize venue image
                                             final venueImages = roomDetails?['venueImages'] as List?;
                                             final hasVenueImage = venueImages != null && venueImages.isNotEmpty;
 
@@ -642,9 +757,7 @@ class _ChatsnewWidgetState extends State<ChatsnewWidget> {
                                                   fit: BoxFit.cover,
                                                   errorBuilder: (context, error, stackTrace) {
                                                     return Icon(
-                                                      room.type == 'single'
-                                                          ? Icons.person_rounded
-                                                          : Icons.groups_rounded,
+                                                      Icons.groups_rounded,
                                                       color: Colors.white,
                                                       size: 28.0,
                                                     );
@@ -662,9 +775,7 @@ class _ChatsnewWidgetState extends State<ChatsnewWidget> {
                                               );
                                             } else {
                                               return Icon(
-                                                room.type == 'single'
-                                                    ? Icons.person_rounded
-                                                    : Icons.groups_rounded,
+                                                Icons.groups_rounded,
                                                 color: Colors.white,
                                                 size: 28.0,
                                               );
@@ -684,7 +795,9 @@ class _ChatsnewWidgetState extends State<ChatsnewWidget> {
                                                 children: [
                                                   Expanded(
                                                     child: Text(
-                                                      room.name ?? 'Chat Room',
+                                                      room.type == 'single'
+                                                          ? (roomDetails?['otherUserName'] ?? room.name ?? 'Chat')
+                                                          : (room.name ?? 'Chat Room'),
                                                       style: FlutterFlowTheme.of(context)
                                                           .titleMedium
                                                           .override(
@@ -703,30 +816,54 @@ class _ChatsnewWidgetState extends State<ChatsnewWidget> {
                                                       overflow: TextOverflow.ellipsis,
                                                     ),
                                                   ),
-                                                  if (roomDetails?['lastMessageTime'] != null)
-                                                    Text(
-                                                      (() {
-                                                        final lastMsgTime = roomDetails!['lastMessageTime'] as DateTime;
-                                                        return lastMsgTime.hour.toString() +
-                                                            ':' +
-                                                            lastMsgTime.minute
-                                                                .toString()
-                                                                .padLeft(2, '0');
-                                                      })(),
-                                                      style: FlutterFlowTheme.of(context)
-                                                          .bodySmall
-                                                          .override(
-                                                            fontFamily:
-                                                                FlutterFlowTheme.of(context)
-                                                                    .bodySmallFamily,
-                                                            color: Color(0xFF8E8E93),
-                                                            fontSize: 13.0,
-                                                            letterSpacing: 0.0,
-                                                            useGoogleFonts:
-                                                                !FlutterFlowTheme.of(context)
-                                                                    .bodySmallIsCustom,
+                                                  Row(
+                                                    mainAxisSize: MainAxisSize.min,
+                                                    children: [
+                                                      if (roomDetails?['lastMessageTime'] != null)
+                                                        Text(
+                                                          (() {
+                                                            final lastMsgTime = roomDetails!['lastMessageTime'] as DateTime;
+                                                            return lastMsgTime.hour.toString() +
+                                                                ':' +
+                                                                lastMsgTime.minute
+                                                                    .toString()
+                                                                    .padLeft(2, '0');
+                                                          })(),
+                                                          style: FlutterFlowTheme.of(context)
+                                                              .bodySmall
+                                                              .override(
+                                                                fontFamily:
+                                                                    FlutterFlowTheme.of(context)
+                                                                        .bodySmallFamily,
+                                                                color: Color(0xFF8E8E93),
+                                                                fontSize: 13.0,
+                                                                letterSpacing: 0.0,
+                                                                useGoogleFonts:
+                                                                    !FlutterFlowTheme.of(context)
+                                                                        .bodySmallIsCustom,
+                                                              ),
+                                                        ),
+                                                      // Unread indicator
+                                                      if ((roomDetails?['unreadCount'] as int? ?? 0) > 0) ...[
+                                                        SizedBox(width: 6.0),
+                                                        Container(
+                                                          padding: EdgeInsets.all(6.0),
+                                                          decoration: BoxDecoration(
+                                                            color: FlutterFlowTheme.of(context).primary,
+                                                            shape: BoxShape.circle,
                                                           ),
-                                                    ),
+                                                          child: Text(
+                                                            '${roomDetails!['unreadCount']}',
+                                                            style: TextStyle(
+                                                              color: Colors.white,
+                                                              fontSize: 10.0,
+                                                              fontWeight: FontWeight.bold,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ],
+                                                  ),
                                                 ],
                                               ),
                                               // Display level if available

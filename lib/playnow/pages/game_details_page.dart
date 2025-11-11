@@ -2069,11 +2069,13 @@ class _GameDetailsPageState extends State<GameDetailsPage> {
 
   Future<void> _shareGame() async {
     final game = _model.game!;
-    final gameUrl =
-        'https://funcircle.page.link/?link=https://funcircle.com/game/${game.id}&apn=com.funcircle.app&ibi=com.funcircle.app';
 
+    // Create deep link URL
+    final deepLink = 'funcircle://game/${game.id}';
+
+    // Create a shareable message with game details
     final shareText = '''
-🎮 Join my ${game.sportType == 'badminton' ? 'Badminton' : 'Pickleball'} game!
+🎮 Join my ${game.sportType == 'badminton' ? 'Badminton' : 'Pickleball'} game on FunCircle!
 
 ${game.autoTitle}
 
@@ -2082,18 +2084,43 @@ ${game.autoTitle}
 ⏰ ${game.formattedTime}
 👥 ${game.currentPlayersCount}/${game.playersNeeded} players
 ${game.isFree ? '💵 Free' : '💵 ${game.costDisplay}'}
+${game.description != null && game.description!.isNotEmpty ? '\n📝 ${game.description}' : ''}
 
-Tap the link to join: $gameUrl
+🔗 Tap to join directly: $deepLink
+
+🆔 Game ID: ${game.id}
+
+Download FunCircle app to join this game!
 ''';
 
     try {
       await Share.share(shareText, subject: 'Join my game on FunCircle');
-    } catch (e) {
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to share game'),
+          SnackBar(
+            content: const Text('Game details shared!'),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error sharing game: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Failed to share game'),
             backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.all(16),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
           ),
         );
       }

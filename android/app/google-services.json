@@ -47,10 +47,11 @@
               "client_type": 3
             },
             {
-              "client_id": "446213644019-8f52ge65ts36o3ktttard3puccvjoqhl.apps.googleusercontent.com",
+              "client_id": "446213644019-5hf1h20bmsbs531id9r7tq1i5f8oad6q.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "kaleo.chat.app"
+                "bundle_id": "faceout.social",
+                "app_store_id": "6479629031"
               }
             }
           ]
@@ -74,11 +75,27 @@
           }
         },
         {
+          "client_id": "446213644019-7c7ckfv8is7nn4rtb5ksdphfulbvnqkf.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "faceout.social",
+            "certificate_hash": "b43a46e7105302c75d6eefcc8358fefb00b75ee3"
+          }
+        },
+        {
           "client_id": "446213644019-pt8jn19mk1dkm6oo0uu91uit2c34aj47.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "faceout.social",
             "certificate_hash": "9bbb3186b2189ef16d8f272bdab59362c395cbb4"
+          }
+        },
+        {
+          "client_id": "446213644019-s0am11uvoeg1t0p8aoi47tpe67ir3ftp.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "faceout.social",
+            "certificate_hash": "3d4110323002d1ca53b9d130b098d86d8b9fd971"
           }
         },
         {
@@ -99,10 +116,11 @@
               "client_type": 3
             },
             {
-              "client_id": "446213644019-8f52ge65ts36o3ktttard3puccvjoqhl.apps.googleusercontent.com",
+              "client_id": "446213644019-5hf1h20bmsbs531id9r7tq1i5f8oad6q.apps.googleusercontent.com",
               "client_type": 2,
               "ios_info": {
-                "bundle_id": "kaleo.chat.app"
+                "bundle_id": "faceout.social",
+                "app_store_id": "6479629031"
               }
             }
           ]

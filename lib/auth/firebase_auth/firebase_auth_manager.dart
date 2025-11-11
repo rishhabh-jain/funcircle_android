@@ -310,17 +310,54 @@ class FirebaseAuthManager extends AuthManager
           ? null
           : FunCircleFirebaseUser.fromUserCredential(userCredential);
     } on FirebaseAuthException catch (e) {
+      print('FirebaseAuthException in $authProvider: ${e.code} - ${e.message}');
       final errorMsg = switch (e.code) {
         'email-already-in-use' =>
           'Error: The email is already in use by a different account',
         'INVALID_LOGIN_CREDENTIALS' =>
           'Error: The supplied auth credential is incorrect, malformed or has expired',
-        _ => 'Error: ${e.message!}',
+        'network-request-failed' =>
+          'Error: Network error. Please check your internet connection.',
+        'too-many-requests' =>
+          'Error: Too many attempts. Please try again later.',
+        'user-disabled' =>
+          'Error: This account has been disabled.',
+        'operation-not-allowed' =>
+          'Error: $authProvider sign-in is not enabled. Please contact support.',
+        _ => 'Error: ${e.message ?? 'Authentication failed'}',
       };
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(errorMsg)),
-      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg),
+            duration: Duration(seconds: 5),
+            backgroundColor: Colors.red[700],
+          ),
+        );
+      }
+      return null;
+    } catch (e, stackTrace) {
+      print('Exception in $authProvider sign-in: $e');
+      print('Stack trace: $stackTrace');
+
+      String errorMsg = 'Sign-in failed. Please try again.';
+      if (e.toString().contains('timeout')) {
+        errorMsg = 'Sign-in timed out. Please check your connection and try again.';
+      } else if (e.toString().contains('PlatformException')) {
+        errorMsg = 'Google Play Services error. Please update Google Play Services.';
+      }
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMsg),
+            duration: Duration(seconds: 5),
+            backgroundColor: Colors.red[700],
+          ),
+        );
+      }
       return null;
     }
   }

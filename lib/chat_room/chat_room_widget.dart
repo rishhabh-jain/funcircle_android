@@ -4,6 +4,7 @@ import '/backend/supabase/supabase.dart';
 import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'chat_room_model.dart';
@@ -58,8 +59,49 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
           .eq('id', widget.roomId!)
           .single();
 
+      final room = ChatRoomsRow(response);
+
+      // If it's a single chat, fetch the other user's details
+      if (room.type == 'single') {
+        try {
+          // Get all members of this room
+          final membersResponse = await SupaFlow.client
+              .schema('chat')
+              .from('room_members')
+              .select('user_id')
+              .eq('room_id', widget.roomId!);
+
+          // Find the other user (not current user)
+          final members = (membersResponse as List);
+          String? otherUserId;
+          for (final member in members) {
+            final userId = member['user_id'];
+            if (userId != currentUserUid) {
+              otherUserId = userId;
+              break;
+            }
+          }
+
+          if (otherUserId != null) {
+            // Fetch other user's details
+            final userResponse = await SupaFlow.client
+                .from('users')
+                .select('first_name, profile_picture')
+                .eq('user_id', otherUserId)
+                .maybeSingle();
+
+            if (userResponse != null) {
+              _model.otherUserName = userResponse['first_name'];
+              _model.otherUserProfilePicture = userResponse['profile_picture'];
+            }
+          }
+        } catch (e) {
+          print('Error fetching other user details: $e');
+        }
+      }
+
       safeSetState(() {
-        _model.chatRoom = ChatRoomsRow(response);
+        _model.chatRoom = room;
         _model.isLoadingRoom = false;
       });
     } catch (e) {
@@ -82,9 +124,48 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
           .eq('is_deleted', false)
           .order('created_at', ascending: true);
 
+      // Fetch profile pictures for all unique senders
+      final messages = response as List;
+      final senderIds = messages
+          .map((m) => m['sender_id'] as String?)
+          .where((id) => id != null)
+          .toSet()
+          .toList();
+
+      Map<String, String?> profilePictures = {};
+      if (senderIds.isNotEmpty) {
+        try {
+          final usersResponse = await SupaFlow.client
+              .from('users')
+              .select('user_id, profile_picture, first_name')
+              .inFilter('user_id', senderIds);
+
+          for (final user in usersResponse as List) {
+            final userId = user['user_id'] as String;
+            profilePictures[userId] = user['profile_picture'] as String?;
+
+            // Also update sender name if not present
+            for (var msg in messages) {
+              if (msg['sender_id'] == userId && msg['sender_name'] == null) {
+                msg['sender_name'] = user['first_name'];
+              }
+            }
+          }
+        } catch (e) {
+          print('Error fetching user profile pictures: $e');
+        }
+      }
+
+      // Add profile pictures to message data
+      for (var msg in messages) {
+        final senderId = msg['sender_id'] as String?;
+        if (senderId != null) {
+          msg['sender_profile_picture'] = profilePictures[senderId];
+        }
+      }
+
       safeSetState(() {
-        _model.messages =
-            (response as List).map((data) => ChatMessagesRow(data)).toList();
+        _model.messages = messages.map((data) => ChatMessagesRow(data)).toList();
         _model.isLoadingMessages = false;
       });
 
@@ -115,11 +196,30 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
             column: 'room_id',
             value: widget.roomId!,
           ),
-          callback: (payload) {
+          callback: (payload) async {
             final newMessageData = payload.newRecord;
             // Only add if it's not from the current user (to avoid duplicates)
             final senderId = newMessageData['sender_id'] as String?;
             if (senderId != null && senderId != currentUserUid) {
+              // Fetch sender's profile picture
+              try {
+                final userResponse = await SupaFlow.client
+                    .from('users')
+                    .select('profile_picture, first_name')
+                    .eq('user_id', senderId)
+                    .maybeSingle();
+
+                if (userResponse != null) {
+                  newMessageData['sender_profile_picture'] =
+                      userResponse['profile_picture'];
+                  if (newMessageData['sender_name'] == null) {
+                    newMessageData['sender_name'] = userResponse['first_name'];
+                  }
+                }
+              } catch (e) {
+                print('Error fetching sender profile: $e');
+              }
+
               final newMessage = ChatMessagesRow(newMessageData);
               safeSetState(() {
                 _model.messages.add(newMessage);
@@ -292,9 +392,9 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                   ),
                 )
               : InkWell(
-                  onTap: () {
+                  onTap: () async {
                     if (widget.roomId != null) {
-                      context.pushNamed(
+                      final result = await context.pushNamed(
                         'ChatRoomInfo',
                         queryParameters: {
                           'roomId': serializeParam(
@@ -303,6 +403,11 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                           ),
                         }.withoutNulls,
                       );
+
+                      // If user left room, pop this screen too with the same result
+                      if (result == 'room_left' && mounted) {
+                        Navigator.of(context).pop('room_left');
+                      }
                     }
                   },
                   child: Row(
@@ -313,21 +418,43 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                         width: 40.0,
                         height: 40.0,
                         decoration: BoxDecoration(
-                          gradient: LinearGradient(
-                            colors: [
-                              FlutterFlowTheme.of(context).primary,
-                              FlutterFlowTheme.of(context).secondary,
-                            ],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ),
+                          gradient: _model.chatRoom?.type == 'single'
+                              ? null
+                              : LinearGradient(
+                                  colors: [
+                                    FlutterFlowTheme.of(context).primary,
+                                    FlutterFlowTheme.of(context).secondary,
+                                  ],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                ),
+                          color: _model.chatRoom?.type == 'single'
+                              ? Colors.grey.shade800
+                              : null,
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(
-                          Icons.groups_rounded,
-                          color: Colors.white,
-                          size: 20.0,
-                        ),
+                        child: _model.chatRoom?.type == 'single' &&
+                                _model.otherUserProfilePicture != null
+                            ? ClipOval(
+                                child: CachedNetworkImage(
+                                  imageUrl: _model.otherUserProfilePicture!,
+                                  fit: BoxFit.cover,
+                                  width: 40.0,
+                                  height: 40.0,
+                                  errorWidget: (context, url, error) => Icon(
+                                    Icons.person,
+                                    color: Colors.white,
+                                    size: 20.0,
+                                  ),
+                                ),
+                              )
+                            : Icon(
+                                _model.chatRoom?.type == 'single'
+                                    ? Icons.person
+                                    : Icons.groups_rounded,
+                                color: Colors.white,
+                                size: 20.0,
+                              ),
                       ),
                       SizedBox(width: 12.0),
                       // Room Name & Type
@@ -337,7 +464,9 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              _model.chatRoom?.name ?? 'Chat',
+                              _model.chatRoom?.type == 'single'
+                                  ? (_model.otherUserName ?? 'Chat')
+                                  : (_model.chatRoom?.name ?? 'Chat'),
                               style: FlutterFlowTheme.of(context)
                                   .headlineMedium
                                   .override(
@@ -495,38 +624,113 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                                       Padding(
                                         padding: EdgeInsetsDirectional.fromSTEB(
                                             0.0, 0.0, 8.0, 0.0),
-                                        child: Container(
-                                          width: 32.0,
-                                          height: 32.0,
-                                          decoration: BoxDecoration(
-                                            gradient: LinearGradient(
-                                              colors: [
-                                                Color(0xFF00C9FF),
-                                                Color(0xFF0084FF),
-                                              ],
-                                              begin: Alignment.topLeft,
-                                              end: Alignment.bottomRight,
-                                            ),
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: Center(
-                                            child: Text(
-                                              (message.senderName ?? 'U')[0].toUpperCase(),
-                                              style: FlutterFlowTheme.of(context)
-                                                  .bodyMedium
-                                                  .override(
-                                                    fontFamily: FlutterFlowTheme.of(context)
-                                                        .bodyMediumFamily,
-                                                    color: Colors.white,
-                                                    fontSize: 14.0,
-                                                    fontWeight: FontWeight.w600,
-                                                    letterSpacing: 0.0,
-                                                    useGoogleFonts: !FlutterFlowTheme.of(context)
-                                                        .bodyMediumIsCustom,
+                                        child: message.senderProfilePicture != null &&
+                                               message.senderProfilePicture!.isNotEmpty
+                                            ? ClipRRect(
+                                                borderRadius: BorderRadius.circular(16.0),
+                                                child: CachedNetworkImage(
+                                                  imageUrl: message.senderProfilePicture!,
+                                                  width: 32.0,
+                                                  height: 32.0,
+                                                  fit: BoxFit.cover,
+                                                  placeholder: (context, url) => Container(
+                                                    width: 32.0,
+                                                    height: 32.0,
+                                                    decoration: BoxDecoration(
+                                                      gradient: LinearGradient(
+                                                        colors: [
+                                                          Color(0xFF00C9FF),
+                                                          Color(0xFF0084FF),
+                                                        ],
+                                                        begin: Alignment.topLeft,
+                                                        end: Alignment.bottomRight,
+                                                      ),
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                    child: Center(
+                                                      child: Text(
+                                                        (message.senderName ?? 'U')[0].toUpperCase(),
+                                                        style: FlutterFlowTheme.of(context)
+                                                            .bodyMedium
+                                                            .override(
+                                                              fontFamily: FlutterFlowTheme.of(context)
+                                                                  .bodyMediumFamily,
+                                                              color: Colors.white,
+                                                              fontSize: 14.0,
+                                                              fontWeight: FontWeight.w600,
+                                                              letterSpacing: 0.0,
+                                                              useGoogleFonts: !FlutterFlowTheme.of(context)
+                                                                  .bodyMediumIsCustom,
+                                                            ),
+                                                      ),
+                                                    ),
                                                   ),
-                                            ),
-                                          ),
-                                        ),
+                                                  errorWidget: (context, url, error) => Container(
+                                                    width: 32.0,
+                                                    height: 32.0,
+                                                    decoration: BoxDecoration(
+                                                      gradient: LinearGradient(
+                                                        colors: [
+                                                          Color(0xFF00C9FF),
+                                                          Color(0xFF0084FF),
+                                                        ],
+                                                        begin: Alignment.topLeft,
+                                                        end: Alignment.bottomRight,
+                                                      ),
+                                                      shape: BoxShape.circle,
+                                                    ),
+                                                    child: Center(
+                                                      child: Text(
+                                                        (message.senderName ?? 'U')[0].toUpperCase(),
+                                                        style: FlutterFlowTheme.of(context)
+                                                            .bodyMedium
+                                                            .override(
+                                                              fontFamily: FlutterFlowTheme.of(context)
+                                                                  .bodyMediumFamily,
+                                                              color: Colors.white,
+                                                              fontSize: 14.0,
+                                                              fontWeight: FontWeight.w600,
+                                                              letterSpacing: 0.0,
+                                                              useGoogleFonts: !FlutterFlowTheme.of(context)
+                                                                  .bodyMediumIsCustom,
+                                                            ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ),
+                                              )
+                                            : Container(
+                                                width: 32.0,
+                                                height: 32.0,
+                                                decoration: BoxDecoration(
+                                                  gradient: LinearGradient(
+                                                    colors: [
+                                                      Color(0xFF00C9FF),
+                                                      Color(0xFF0084FF),
+                                                    ],
+                                                    begin: Alignment.topLeft,
+                                                    end: Alignment.bottomRight,
+                                                  ),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: Center(
+                                                  child: Text(
+                                                    (message.senderName ?? 'U')[0].toUpperCase(),
+                                                    style: FlutterFlowTheme.of(context)
+                                                        .bodyMedium
+                                                        .override(
+                                                          fontFamily: FlutterFlowTheme.of(context)
+                                                              .bodyMediumFamily,
+                                                          color: Colors.white,
+                                                          fontSize: 14.0,
+                                                          fontWeight: FontWeight.w600,
+                                                          letterSpacing: 0.0,
+                                                          useGoogleFonts: !FlutterFlowTheme.of(context)
+                                                              .bodyMediumIsCustom,
+                                                        ),
+                                                  ),
+                                                ),
+                                              ),
                                       ),
                                     Flexible(
                                       child: Column(
@@ -799,8 +1003,14 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                             child: TextFormField(
                               controller: _model.messageController,
                               focusNode: _model.messageFieldFocusNode,
-                              autofocus: false,
+                              autofocus: true,
                               obscureText: false,
+                              textInputAction: TextInputAction.send,
+                              onFieldSubmitted: (value) async {
+                                if (!_model.isSendingMessage && value.trim().isNotEmpty) {
+                                  await _sendMessage();
+                                }
+                              },
                               decoration: InputDecoration(
                                 isDense: true,
                                 hintText: 'Message',

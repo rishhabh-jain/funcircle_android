@@ -48,6 +48,17 @@
         <string>faceout.social</string>
         </array>
         </dict>
+
+        <dict>
+        <key>CFBundleTypeRole</key>
+        <string>Editor</string>
+        <key>CFBundleURLName</key>
+        <string>com.funcircle.deeplinks</string>
+        <key>CFBundleURLSchemes</key>
+        <array>
+        <string>funcircle</string>
+        </array>
+        </dict>
     </array>
     <key>FlutterDeepLinkingEnabled</key>
     <false/>
@@ -73,7 +84,12 @@ Your location is only used while the app is open and is never shared with other 
 • Profile Updates: Update your profile picture any time from the Settings screen
 Photos are stored securely and you have full control over what you share.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-    <string>Upload good images to increase your profile visibility</string>
+    <string>Fun Circle accesses your photo library for these specific features:
+• Profile Setup: Select photos from your gallery for your player profile during account creation
+• Profile Updates: Choose new photos to update your profile picture from the Settings screen
+• Game Memories: Share photos from your gallery with playing partners in the Chat feature
+• Venue Photos: View venue images to help you choose the right court for your games
+Photos are only accessed when you explicitly choose to upload or share them, and you have full control over what you share.</string>
 
     <key>UIBackgroundModes</key>
     <array>

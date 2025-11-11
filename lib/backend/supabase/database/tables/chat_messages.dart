@@ -75,4 +75,7 @@ class ChatMessagesRow extends SupabaseDataRow {
 
   String? get senderName => getField<String>('sender_name');
   set senderName(String? value) => setField<String>('sender_name', value);
+
+  String? get senderProfilePicture => getField<String>('sender_profile_picture');
+  set senderProfilePicture(String? value) => setField<String>('sender_profile_picture', value);
 }

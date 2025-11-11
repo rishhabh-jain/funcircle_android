@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
+import 'dart:ui';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_widgets.dart';
 import '/auth/firebase_auth/auth_util.dart';
@@ -99,47 +101,57 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.only(
-        bottom: MediaQuery.of(context).viewInsets.bottom,
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
       ),
-      decoration: BoxDecoration(
-        color: FlutterFlowTheme.of(context).secondaryBackground,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header with close button
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Create a Game',
-                      style: FlutterFlowTheme.of(context).headlineMedium,
+      child: Container(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        decoration: const BoxDecoration(
+          color: Color(0xFF121212),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Form(
+            key: _formKey,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header with close button
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Create a Game',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
-                  ),
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close),
-                    tooltip: 'Close',
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                'Set up your game and invite players',
-                style: FlutterFlowTheme.of(context).bodySmall.override(
-                      fontFamily: 'Readex Pro',
-                      color: Colors.grey,
+                    IconButton(
+                      onPressed: () => Navigator.pop(context),
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      tooltip: 'Close',
                     ),
-              ),
-              const SizedBox(height: 24),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Set up your game and invite players',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.6),
+                    fontSize: 14,
+                  ),
+                ),
+                const SizedBox(height: 24),
 
               // Sport Type
               _buildSectionTitle('Sport'),
@@ -163,31 +175,42 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
                   Expanded(
                     child: InkWell(
                       onTap: _selectDate,
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey[300]!),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Date',
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 12,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.15),
+                                width: 1.5,
                               ),
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              DateFormat('MMM dd, yyyy').format(_gameDate),
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Date',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.6),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  DateFormat('MMM dd, yyyy').format(_gameDate),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
@@ -196,31 +219,42 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
                   Expanded(
                     child: InkWell(
                       onTap: _selectTime,
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey[300]!),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Time',
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 12,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: BackdropFilter(
+                          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                          child: Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.15),
+                                width: 1.5,
                               ),
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              _startTime.format(context),
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Time',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.6),
+                                    fontSize: 12,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  _startTime.format(context),
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
+                          ),
                         ),
                       ),
                     ),
@@ -258,13 +292,14 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
                         setState(() => _playersNeeded--);
                       }
                     },
-                    icon: const Icon(Icons.remove_circle_outline),
+                    icon: const Icon(Icons.remove_circle_outline, color: Colors.white),
                   ),
                   Expanded(
                     child: Center(
                       child: Text(
                         '$_playersNeeded players',
                         style: const TextStyle(
+                          color: Colors.white,
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
                         ),
@@ -277,7 +312,7 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
                         setState(() => _playersNeeded++);
                       }
                     },
-                    icon: const Icon(Icons.add_circle_outline),
+                    icon: const Icon(Icons.add_circle_outline, color: Colors.white),
                   ),
                 ],
               ),
@@ -314,12 +349,26 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
               if (!_isFree) ...[
                 const SizedBox(height: 12),
                 TextFormField(
+                  style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
                     labelText: 'Cost per player',
+                    labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
                     prefixText: '₹',
+                    prefixStyle: const TextStyle(color: Colors.white),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
                     ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFFFF6B35), width: 2),
+                    ),
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.08),
                   ),
                   keyboardType: TextInputType.number,
                   onChanged: (value) {
@@ -356,19 +405,34 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
                 const Center(
                   child: Padding(
                     padding: EdgeInsets.all(16.0),
-                    child: CircularProgressIndicator(),
+                    child: CircularProgressIndicator(color: Color(0xFFFF6B35)),
                   ),
                 )
               else
                 DropdownButtonFormField<int>(
                   isExpanded: true,
+                  dropdownColor: const Color(0xFF1E1E1E),
+                  style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
                     labelText: 'Select Venue',
+                    labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
                     hintText: 'Choose a venue',
+                    hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
                     ),
-                    prefixIcon: const Icon(Icons.location_on),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFFFF6B35), width: 2),
+                    ),
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.08),
+                    prefixIcon: const Icon(Icons.location_on, color: Colors.white),
                   ),
                   items: [
                     const DropdownMenuItem<int>(
@@ -406,13 +470,27 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
               if (_venueId == null) ...[
                 const SizedBox(height: 12),
                 TextFormField(
+                  style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
                     labelText: 'Custom Location',
+                    labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
                     hintText: 'Enter custom location',
+                    hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
                     ),
-                    prefixIcon: const Icon(Icons.edit_location),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(color: Color(0xFFFF6B35), width: 2),
+                    ),
+                    filled: true,
+                    fillColor: Colors.white.withValues(alpha: 0.08),
+                    prefixIcon: const Icon(Icons.edit_location, color: Colors.white),
                   ),
                   onChanged: (value) => _customLocation = value,
                   initialValue: _customLocation,
@@ -422,14 +500,14 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    color: Colors.green.withValues(alpha: 0.1),
+                    color: Colors.green.withValues(alpha: 0.15),
                     border:
-                        Border.all(color: Colors.green.withValues(alpha: 0.3)),
+                        Border.all(color: Colors.green.withValues(alpha: 0.4), width: 1.5),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.check_circle, color: Colors.green, size: 20),
+                      Icon(Icons.check_circle, color: Colors.green[400], size: 20),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Column(
@@ -438,6 +516,7 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
                             Text(
                               _selectedVenue!.name,
                               style: const TextStyle(
+                                color: Colors.white,
                                 fontWeight: FontWeight.w600,
                                 fontSize: 14,
                               ),
@@ -447,7 +526,7 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
                                 _selectedVenue!.address!,
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: Colors.grey[700],
+                                  color: Colors.white.withValues(alpha: 0.6),
                                 ),
                               ),
                           ],
@@ -462,12 +541,26 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
               // Description
               _buildSectionTitle('Description (Optional)'),
               TextFormField(
+                style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
                   labelText: 'Description',
+                  labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
                   hintText: 'Add any additional details...',
+                  hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
                   ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: const BorderSide(color: Color(0xFFFF6B35), width: 2),
+                  ),
+                  filled: true,
+                  fillColor: Colors.white.withValues(alpha: 0.08),
                 ),
                 maxLines: 3,
                 onChanged: (value) => _description = value,
@@ -475,36 +568,50 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
               const SizedBox(height: 20),
 
               // Advanced Options - Collapsible
-              ExpansionTile(
-                title: Text(
-                  'Advanced Options',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
+              Theme(
+                data: ThemeData.dark().copyWith(
+                  dividerColor: Colors.transparent,
                 ),
-                initiallyExpanded: false,
-                children: [
-                  CheckboxListTile(
-                    title: const Text('Venue Booked'),
-                    value: _isVenueBooked,
-                    onChanged: (value) =>
-                        setState(() => _isVenueBooked = value!),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                child: ExpansionTile(
+                  title: const Text(
+                    'Advanced Options',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                  CheckboxListTile(
-                    title: const Text('Women Only'),
-                    value: _isWomenOnly,
-                    onChanged: (value) => setState(() => _isWomenOnly = value!),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                  ),
-                  CheckboxListTile(
-                    title: const Text('Mixed Doubles Only'),
-                    value: _isMixedOnly,
-                    onChanged: (value) => setState(() => _isMixedOnly = value!),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-                  ),
-                ],
+                  iconColor: Colors.white,
+                  collapsedIconColor: Colors.white,
+                  initiallyExpanded: false,
+                  children: [
+                    CheckboxListTile(
+                      title: const Text('Venue Booked', style: TextStyle(color: Colors.white)),
+                      value: _isVenueBooked,
+                      onChanged: (value) =>
+                          setState(() => _isVenueBooked = value!),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                      activeColor: const Color(0xFFFF6B35),
+                      checkColor: Colors.white,
+                    ),
+                    CheckboxListTile(
+                      title: const Text('Women Only', style: TextStyle(color: Colors.white)),
+                      value: _isWomenOnly,
+                      onChanged: (value) => setState(() => _isWomenOnly = value!),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                      activeColor: const Color(0xFFFF6B35),
+                      checkColor: Colors.white,
+                    ),
+                    CheckboxListTile(
+                      title: const Text('Mixed Doubles Only', style: TextStyle(color: Colors.white)),
+                      value: _isMixedOnly,
+                      onChanged: (value) => setState(() => _isMixedOnly = value!),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                      activeColor: const Color(0xFFFF6B35),
+                      checkColor: Colors.white,
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 24),
 
@@ -530,6 +637,7 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
           ),
         ),
       ),
+    ),
     );
   }
 
@@ -539,6 +647,7 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
       child: Text(
         title,
         style: const TextStyle(
+          color: Colors.white,
           fontSize: 16,
           fontWeight: FontWeight.bold,
         ),
@@ -548,25 +657,37 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
 
   Widget _buildSportChip(String label, String value) {
     final isSelected = _sportType == value;
-    final primaryColor = FlutterFlowTheme.of(context).primary;
     return InkWell(
       onTap: () => setState(() => _sportType = value),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: isSelected ? primaryColor : Colors.grey[200],
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? primaryColor : Colors.grey[300]!,
-            width: 2,
-          ),
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-              color: isSelected ? Colors.white : Colors.black,
-              fontWeight: FontWeight.w600,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              gradient: isSelected
+                  ? const LinearGradient(
+                      colors: [Color(0xFFFF6B35), Color(0xFFF7931E)],
+                    )
+                  : null,
+              color: isSelected ? null : Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected
+                    ? Colors.orange.withValues(alpha: 0.5)
+                    : Colors.white.withValues(alpha: 0.15),
+                width: 1.5,
+              ),
+            ),
+            child: Center(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ),
         ),
@@ -576,29 +697,41 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
 
   Widget _buildGameTypeChip(String label, String value, int defaultPlayers) {
     final isSelected = _gameType == value;
-    final primaryColor = FlutterFlowTheme.of(context).primary;
     return InkWell(
       onTap: () => setState(() {
         _gameType = value;
         _playersNeeded = defaultPlayers;
       }),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: isSelected ? primaryColor : Colors.grey[200],
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? primaryColor : Colors.grey[300]!,
-            width: 2,
-          ),
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-              color: isSelected ? Colors.white : Colors.black,
-              fontWeight: FontWeight.w600,
-              fontSize: 12,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              gradient: isSelected
+                  ? const LinearGradient(
+                      colors: [Color(0xFFFF6B35), Color(0xFFF7931E)],
+                    )
+                  : null,
+              color: isSelected ? null : Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected
+                    ? Colors.orange.withValues(alpha: 0.5)
+                    : Colors.white.withValues(alpha: 0.15),
+                width: 1.5,
+              ),
+            ),
+            child: Center(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 12,
+                ),
+              ),
             ),
           ),
         ),
@@ -608,41 +741,75 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
 
   Widget _buildSkillLevelChip(String label, int? value) {
     final isSelected = _skillLevel == value;
-    final primaryColor = FlutterFlowTheme.of(context).primary;
-    return ChoiceChip(
-      label: Text(label),
-      selected: isSelected,
-      onSelected: (selected) {
-        setState(() => _skillLevel = selected ? value : null);
-      },
-      selectedColor: primaryColor,
-      labelStyle: TextStyle(
-        color: isSelected ? Colors.white : Colors.black,
+    return InkWell(
+      onTap: () => setState(() => _skillLevel = isSelected ? null : value),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              gradient: isSelected
+                  ? const LinearGradient(
+                      colors: [Color(0xFFFF6B35), Color(0xFFF7931E)],
+                    )
+                  : null,
+              color: isSelected ? null : Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected
+                    ? Colors.orange.withValues(alpha: 0.5)
+                    : Colors.white.withValues(alpha: 0.15),
+                width: 1.5,
+              ),
+            ),
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildCostChip(String label, bool isFree) {
     final isSelected = _isFree == isFree;
-    final primaryColor = FlutterFlowTheme.of(context).primary;
     return InkWell(
       onTap: () => setState(() => _isFree = isFree),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: isSelected ? primaryColor : Colors.grey[200],
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? primaryColor : Colors.grey[300]!,
-            width: 2,
-          ),
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-              color: isSelected ? Colors.white : Colors.black,
-              fontWeight: FontWeight.w600,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              gradient: isSelected
+                  ? const LinearGradient(
+                      colors: [Color(0xFFFF6B35), Color(0xFFF7931E)],
+                    )
+                  : null,
+              color: isSelected ? null : Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected
+                    ? Colors.orange.withValues(alpha: 0.5)
+                    : Colors.white.withValues(alpha: 0.15),
+                width: 1.5,
+              ),
+            ),
+            child: Center(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ),
         ),
@@ -652,25 +819,37 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
 
   Widget _buildJoinTypeChip(String label, String value) {
     final isSelected = _joinType == value;
-    final primaryColor = FlutterFlowTheme.of(context).primary;
     return InkWell(
       onTap: () => setState(() => _joinType = value),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12),
-        decoration: BoxDecoration(
-          color: isSelected ? primaryColor : Colors.grey[200],
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? primaryColor : Colors.grey[300]!,
-            width: 2,
-          ),
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-              color: isSelected ? Colors.white : Colors.black,
-              fontWeight: FontWeight.w600,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              gradient: isSelected
+                  ? const LinearGradient(
+                      colors: [Color(0xFFFF6B35), Color(0xFFF7931E)],
+                    )
+                  : null,
+              color: isSelected ? null : Colors.white.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isSelected
+                    ? Colors.orange.withValues(alpha: 0.5)
+                    : Colors.white.withValues(alpha: 0.15),
+                width: 1.5,
+              ),
+            ),
+            child: Center(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
             ),
           ),
         ),
@@ -684,6 +863,22 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
       initialDate: _gameDate,
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 90)),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: Color(0xFFFF6B35),
+              onPrimary: Colors.white,
+              surface: Color(0xFF1E1E1E),
+              onSurface: Colors.white,
+            ),
+            dialogTheme: const DialogThemeData(
+              backgroundColor: Color(0xFF1E1E1E),
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
     if (picked != null) {
       setState(() => _gameDate = picked);
@@ -694,6 +889,22 @@ class _CreateGameSheetState extends State<CreateGameSheet> {
     final picked = await showTimePicker(
       context: context,
       initialTime: _startTime,
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.dark().copyWith(
+            colorScheme: const ColorScheme.dark(
+              primary: Color(0xFFFF6B35),
+              onPrimary: Colors.white,
+              surface: Color(0xFF1E1E1E),
+              onSurface: Colors.white,
+            ),
+            dialogTheme: const DialogThemeData(
+              backgroundColor: Color(0xFF1E1E1E),
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
     if (picked != null) {
       // Check if selected time is in the past for today's date

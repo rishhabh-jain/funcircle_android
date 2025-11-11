@@ -19,10 +19,14 @@ import 'package:flutter/foundation.dart';
 import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'flutter_flow/firebase_app_check_util.dart';
 import 'index.dart';
-import 'flutter_flow/revenue_cat_util.dart' as revenue_cat;
+// RevenueCat disabled - uncomment if re-enabling in-app purchases
+// import 'flutter_flow/revenue_cat_util.dart' as revenue_cat;
 
 import '/backend/firebase_dynamic_links/firebase_dynamic_links.dart';
 import '/playnow/services/payment_reconciliation_service.dart';
+import '/playnow/services/game_deep_link_handler.dart';
+import '/utils/room_invite_deep_link_handler.dart';
+import '/funcirclefinalapp/services/venue_deep_link_handler.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -40,11 +44,13 @@ void main() async {
   final appState = FFAppState(); // Initialize FFAppState
   await appState.initializePersistedState();
 
-  await revenue_cat.initialize(
-    "appl_YkelnentWgJrnnWWGdMxZCVEJKx",
-    "goog_ONdyIZjXXVhUiLwBBFiPqLVucqk",
-    loadDataAfterLaunch: true,
-  );
+  // NOTE: RevenueCat disabled - no in-app purchases in current version
+  // Uncomment below if you want to re-enable subscriptions/in-app purchases
+  // await revenue_cat.initialize(
+  //   "appl_YkelnentWgJrnnWWGdMxZCVEJKx",
+  //   "goog_ONdyIZjXXVhUiLwBBFiPqLVucqk",
+  //   loadDataAfterLaunch: true,
+  // );
 
   if (!kIsWeb) {
     FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
@@ -98,7 +104,8 @@ class _MyAppState extends State<MyApp> {
   late Stream<BaseAuthUser> userStream;
 
   final authUserSub = authenticatedUserStream.listen((user) {
-    revenue_cat.login(user?.uid);
+    // RevenueCat disabled - no in-app purchases in current version
+    // revenue_cat.login(user?.uid);
   });
   final fcmTokenSub = fcmTokenUserStream.listen((_) {});
 
@@ -167,10 +174,19 @@ class _MyAppState extends State<MyApp> {
       ),
       themeMode: _themeMode,
       routerConfig: _router,
-      builder: (_, child) => DynamicLinksHandler(
-        router: _router,
-        child: child!,
-      ),
+      builder: (context, child) {
+        // Initialize all deep link handlers
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          GameDeepLinkHandler().initialize(context);
+          RoomInviteDeepLinkHandler().initialize(context);
+          VenueDeepLinkHandler().initialize(context);
+        });
+
+        return DynamicLinksHandler(
+          router: _router,
+          child: child!,
+        );
+      },
     );
   }
 }
@@ -238,6 +254,9 @@ class NavBarPageState extends State<NavBarPage> {
       {'icon': Icons.forum_rounded, 'label': 'Chats'},
     ];
 
+    // Get bottom safe area padding
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+
     return Container(
       decoration: BoxDecoration(
         boxShadow: [
@@ -255,7 +274,8 @@ class NavBarPageState extends State<NavBarPage> {
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
           child: Container(
-            height: 65,
+            // Add bottom padding for safe area
+            padding: EdgeInsets.only(bottom: bottomPadding),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 begin: Alignment.topCenter,
@@ -274,7 +294,9 @@ class NavBarPageState extends State<NavBarPage> {
                 ),
               ),
             ),
-            child: Row(
+            child: SizedBox(
+              height: 65,
+              child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                     children: List.generate(navItems.length, (index) {
                       final item = navItems[index];
@@ -369,6 +391,7 @@ class NavBarPageState extends State<NavBarPage> {
                         ),
                       );
                     }),
+              ),
             ),
           ),
         ),

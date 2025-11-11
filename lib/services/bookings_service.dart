@@ -13,105 +13,10 @@ class BookingsService {
       final now = DateTime.now();
       final bookings = <Booking>[];
 
-      // ============ FETCH FROM OLD SYSTEM (orders/tickets) ============
+      // ============ FETCH PAID PLAYNOW GAMES ============
+      // NOTE: Only show paid games (both official and user-created)
       try {
-        print('Fetching from OLD system (orders/tickets)...');
-
-        var oldQuery = _supabase
-            .from('orders')
-            .select('''
-              id,
-              created_at,
-              status,
-              Orderitems!inner(
-                id,
-                ticket_id,
-                quantity,
-                sub_price,
-                status,
-                tickets!inner(
-                  id,
-                  title,
-                  type,
-                  startdatetime,
-                  enddatetime,
-                  price,
-                  venueid,
-                  venues!venueid(
-                    id,
-                    venue_name,
-                    location
-                  )
-                )
-              )
-            ''')
-            .eq('user_id', userId);
-
-        // Apply status filters for old system
-        if (filter != null && filter != 'all') {
-          switch (filter.toLowerCase()) {
-            case 'upcoming':
-              oldQuery = oldQuery.eq('status', 'confirmed');
-              break;
-            case 'cancelled':
-              oldQuery = oldQuery.eq('status', 'cancelled');
-              break;
-          }
-        }
-
-        final oldResults = await oldQuery.order('created_at', ascending: false);
-        print('Received ${(oldResults as List).length} old system orders');
-
-        // Transform old system orders into bookings
-        for (final order in oldResults) {
-          try {
-            final orderId = order['id'];
-            final orderStatus = order['status'] ?? 'confirmed';
-            final bookedAt = DateTime.parse(order['created_at'] as String);
-
-            final orderItems = order['Orderitems'] as List? ?? [];
-
-            for (final item in orderItems) {
-              final ticket = item['tickets'];
-              if (ticket == null) continue;
-
-              final venue = ticket['venues'];
-              final startDateTime = DateTime.parse(ticket['startdatetime'] as String);
-              final endDateTime = DateTime.parse(ticket['enddatetime'] as String);
-
-              // Apply date-based filters
-              if (filter == 'upcoming' && !startDateTime.isAfter(now)) continue;
-              if (filter == 'past' && !endDateTime.isBefore(now)) continue;
-
-              final booking = Booking(
-                orderId: 'ticket-${orderId}',
-                gameTitle: ticket['title'] ?? 'Game',
-                gameSport: ticket['type'] ?? 'Badminton',
-                venueId: venue?['id']?.toString() ?? '',
-                venueName: venue?['venue_name'] ?? 'Venue',
-                venueLocation: venue?['location'] ?? 'Location',
-                startDateTime: startDateTime,
-                endDateTime: endDateTime,
-                bookedAt: bookedAt,
-                bookingStatus: orderStatus,
-                totalAmount: double.tryParse(item['sub_price']?.toString() ?? '0') ?? 0.0,
-                totalTickets: (item['quantity'] as int?) ?? 1,
-              );
-
-              bookings.add(booking);
-            }
-          } catch (e) {
-            print('Error parsing old system order: $e');
-          }
-        }
-      } catch (e) {
-        print('Error fetching from old system: $e');
-      }
-
-      // ============ FETCH FROM NEW SYSTEM (playnow/games) ============
-      // NOTE: Only fetch OFFICIAL FUNCIRCLE games for bookings (is_official = TRUE)
-      try {
-        print('Fetching from NEW system (playnow/games)... OFFICIAL FUNCIRCLE GAMES ONLY');
+        print('Fetching paid PlayNow games...');
 
         // First, get all participants for this user to see what we have
         final allParticipants = await _supabase
@@ -120,10 +25,11 @@ class BookingsService {
             .select('game_id, payment_status, payment_amount')
             .eq('user_id', userId);
 
-        print('DEBUG: Total game_participants for user: ${(allParticipants as List).length}');
+        print('DEBUG BOOKINGS: Total game_participants for user: ${(allParticipants as List).length}');
         for (final p in allParticipants) {
-          print('  - game_id: ${p['game_id']}, payment_status: ${p['payment_status']}, amount: ${p['payment_amount']}');
+          print('  - game_id: ${p['game_id']}, payment_status: "${p['payment_status']}", amount: ${p['payment_amount']}');
         }
+        print('DEBUG BOOKINGS: Looking for payment_status == "paid"');
 
         var newQuery = _supabase
             .schema('playnow')
@@ -147,44 +53,60 @@ class BookingsService {
               )
             ''')
             .eq('user_id', userId)
-            .filter('games.is_official', 'eq', true) // Only official FunCircle games
-            .eq('payment_status', 'paid'); // And must be paid
+            .eq('payment_status', 'paid'); // Only show paid games in bookings
 
-        // Apply status filters for new system
+        // Apply status filters for new system (match My Games logic)
         if (filter != null && filter != 'all') {
           switch (filter.toLowerCase()) {
-            case 'upcoming':
-              newQuery = newQuery.filter('games.status', 'in', '(open,full)');
-              break;
-            case 'past':
-              newQuery = newQuery.eq('games.status', 'completed');
-              break;
             case 'cancelled':
               newQuery = newQuery.eq('games.status', 'cancelled');
+              break;
+            case 'upcoming':
+            case 'past':
+              // Don't filter by status at DB level - let date-based filtering handle it
+              // This ensures all games (open, full, completed, etc.) show up if they match the date criteria
+              newQuery = newQuery.neq('games.status', 'cancelled');
               break;
           }
         }
 
         final newResults = await newQuery.order('joined_at', ascending: false);
-        print('Received ${(newResults as List).length} new system games');
+        print('DEBUG BOOKINGS: Received ${(newResults as List).length} paid games after filtering');
+        if ((newResults as List).isEmpty) {
+          print('DEBUG BOOKINGS: No paid games found! Check if payment_status values match "paid"');
+        }
 
         // Transform new system games into bookings
         for (final participant in newResults) {
           try {
             final game = participant['games'];
-            if (game == null) continue;
+            if (game == null) {
+              print('DEBUG BOOKINGS: Skipping participant - game is null');
+              continue;
+            }
 
             final gameDate = game['game_date'] as String;
             final startTime = game['start_time'] as String;
-            final endTime = game['end_time'] as String;
+            final endTime = game['end_time'] as String?; // Nullable
 
             final startDateTime = DateTime.parse('$gameDate $startTime');
-            final endDateTime = DateTime.parse('$gameDate $endTime');
+            // If end_time is null, default to 1 hour after start time
+            final endDateTime = endTime != null
+                ? DateTime.parse('$gameDate $endTime')
+                : startDateTime.add(Duration(hours: 1));
             final joinedAt = DateTime.parse(participant['joined_at'] as String);
 
+            print('DEBUG BOOKINGS: Processing game ${game['id']}, date: $startDateTime, filter: $filter');
+
             // Apply date-based filters
-            if (filter == 'upcoming' && !startDateTime.isAfter(now)) continue;
-            if (filter == 'past' && !endDateTime.isBefore(now)) continue;
+            if (filter == 'upcoming' && !startDateTime.isAfter(now)) {
+              print('DEBUG BOOKINGS: Skipping game ${game['id']} - not upcoming (date: $startDateTime vs now: $now)');
+              continue;
+            }
+            if (filter == 'past' && !endDateTime.isBefore(now)) {
+              print('DEBUG BOOKINGS: Skipping game ${game['id']} - not past (endDate: $endDateTime vs now: $now)');
+              continue;
+            }
 
             // Map game status to booking status
             String bookingStatus;
@@ -242,19 +164,20 @@ class BookingsService {
             );
 
             bookings.add(booking);
+            print('DEBUG BOOKINGS: Added booking for game ${game['id']} - ${booking.gameTitle}');
           } catch (e) {
-            print('Error parsing new system game: $e');
+            print('Error parsing PlayNow game: $e');
             print('Problematic game data: $participant');
           }
         }
       } catch (e) {
-        print('Error fetching from new system: $e');
+        print('Error fetching PlayNow games: $e');
       }
 
       // Sort all bookings by booked date (most recent first)
       bookings.sort((a, b) => b.bookedAt.compareTo(a.bookedAt));
 
-      print('Successfully fetched ${bookings.length} total bookings (old + new system)');
+      print('Successfully fetched ${bookings.length} paid game bookings');
       return bookings;
     } catch (e, stackTrace) {
       print('Error in getUserBookings: $e');

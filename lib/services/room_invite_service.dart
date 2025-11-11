@@ -34,11 +34,8 @@ class RoomInviteService {
       // Generate unique invite code
       final inviteCode = _generateInviteCode();
 
-      // Create the invite link
-      // TODO: Replace with your actual deep link domain
-      final inviteLink = 'https://funcircle.app/room/join/$inviteCode';
-      // For Firebase Dynamic Links:
-      // final inviteLink = await _createDynamicLink(inviteCode);
+      // Create the invite link using custom URL scheme
+      final inviteLink = 'funcircle://room/join/$inviteCode';
 
       // Calculate expiry date
       DateTime? expiresAt;

@@ -3,6 +3,7 @@ import '/flutter_flow/flutter_flow_util.dart';
 import '/auth/firebase_auth/auth_util.dart';
 import '../../services/bookings_service.dart';
 import '../../models/booking.dart';
+import '../../playnow/pages/game_details_page.dart';
 import 'widgets/booking_card.dart';
 import 'booking_detail_screen.dart';
 import 'package:flutter/material.dart';
@@ -105,15 +106,33 @@ class _MyBookingsWidgetState extends State<MyBookingsWidget>
   }
 
   void _showBookingDetails(Booking booking) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => BookingDetailScreen(booking: booking),
-      ),
-    ).then((_) {
-      // Refresh bookings when returning from details screen
-      _loadBookings();
-    });
+    // Check if this is a PlayNow game (orderId starts with 'game-')
+    if (booking.orderId.startsWith('game-')) {
+      // Extract game ID (remove 'game-' prefix)
+      final gameId = booking.orderId.substring(5);
+
+      // Navigate to PlayNow game details page
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => GameDetailsPage(gameId: gameId),
+        ),
+      ).then((_) {
+        // Refresh bookings when returning from details screen
+        _loadBookings();
+      });
+    } else {
+      // For old system bookings (tickets), use BookingDetailScreen
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => BookingDetailScreen(booking: booking),
+        ),
+      ).then((_) {
+        // Refresh bookings when returning from details screen
+        _loadBookings();
+      });
+    }
   }
 
 

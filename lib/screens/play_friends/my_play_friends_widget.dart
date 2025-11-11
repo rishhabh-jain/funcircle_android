@@ -155,80 +155,6 @@ class _MyPlayFriendsWidgetState extends State<MyPlayFriendsWidget>
     }
   }
 
-  void _showMockFriends() {
-    setState(() {
-      _model.allFriends = [
-        PlayFriend(
-          friendshipId: 'mock-1',
-          friendId: 'friend-1',
-          friendName: 'Rahul Sharma',
-          friendImage: 'https://i.pravatar.cc/150?img=12',
-          friendLevel: '4',
-          gamesPlayedTogether: 15,
-          isFavorite: true,
-          preferredSport: 'Badminton',
-          lastPlayedAt: DateTime.now().subtract(const Duration(days: 2)),
-          friendsSince: DateTime.now().subtract(const Duration(days: 120)),
-          sportsPlayed: ['Badminton', 'Pickleball'],
-        ),
-        PlayFriend(
-          friendshipId: 'mock-2',
-          friendId: 'friend-2',
-          friendName: 'Priya Singh',
-          friendImage: 'https://i.pravatar.cc/150?img=47',
-          friendLevel: '3',
-          gamesPlayedTogether: 8,
-          isFavorite: false,
-          nickname: 'Priya P',
-          preferredSport: 'Pickleball',
-          lastPlayedAt: DateTime.now().subtract(const Duration(hours: 12)),
-          friendsSince: DateTime.now().subtract(const Duration(days: 60)),
-          sportsPlayed: ['Pickleball'],
-        ),
-        PlayFriend(
-          friendshipId: 'mock-3',
-          friendId: 'friend-3',
-          friendName: 'Amit Kumar',
-          friendImage: 'https://i.pravatar.cc/150?img=33',
-          friendLevel: '5',
-          gamesPlayedTogether: 23,
-          isFavorite: true,
-          preferredSport: 'Badminton',
-          lastPlayedAt: DateTime.now().subtract(const Duration(days: 1)),
-          friendsSince: DateTime.now().subtract(const Duration(days: 180)),
-          sportsPlayed: ['Badminton'],
-        ),
-        PlayFriend(
-          friendshipId: 'mock-4',
-          friendId: 'friend-4',
-          friendName: 'Sneha Patel',
-          friendImage: 'https://i.pravatar.cc/150?img=25',
-          friendLevel: '2',
-          gamesPlayedTogether: 5,
-          isFavorite: false,
-          preferredSport: 'Badminton',
-          lastPlayedAt: DateTime.now().subtract(const Duration(days: 7)),
-          friendsSince: DateTime.now().subtract(const Duration(days: 30)),
-          sportsPlayed: ['Badminton', 'Pickleball'],
-        ),
-        PlayFriend(
-          friendshipId: 'mock-5',
-          friendId: 'friend-5',
-          friendName: 'Arjun Mehta',
-          friendImage: 'https://i.pravatar.cc/150?img=68',
-          friendLevel: '4',
-          gamesPlayedTogether: 12,
-          isFavorite: false,
-          nickname: 'AJ',
-          preferredSport: 'Pickleball',
-          lastPlayedAt: DateTime.now().subtract(const Duration(days: 3)),
-          friendsSince: DateTime.now().subtract(const Duration(days: 90)),
-          sportsPlayed: ['Pickleball'],
-        ),
-      ];
-      _applyFilters();
-    });
-  }
 
   int get _totalGamesPlayed {
     return _model.allFriends.fold(0, (sum, friend) => sum + friend.gamesPlayedTogether);
@@ -713,42 +639,6 @@ class _MyPlayFriendsWidgetState extends State<MyPlayFriendsWidget>
               fontSize: 14,
             ),
             textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 24),
-          // Preview button
-          GestureDetector(
-            onTap: _showMockFriends,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFFFF6B35), Color(0xFFF7931E)],
-                ),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.orange.withValues(alpha: 0.4),
-                    blurRadius: 12,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: const [
-                  Icon(Icons.visibility, color: Colors.white, size: 18),
-                  SizedBox(width: 8),
-                  Text(
-                    'Preview UI Design',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ),
         ],
       ),

@@ -35,7 +35,13 @@
       "Bash(keytool -export -rfc:*)",
       "Bash(file:*)",
       "Bash(ls:*)",
-      "Bash(dart fix:*)"
+      "Bash(dart fix:*)",
+      "Bash(chmod:*)",
+      "Bash(/Users/sanchitjain/funcircle_app_flutter/fun_circle/get_sha1.sh:*)",
+      "Bash(keytool:*)",
+      "Bash(psql:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nPre-deployment updates for App Store and Play Store submission\n\n- Updated privacy permission strings in Info.plist\n- Fixed chat functionality with user profiles and unread indicators\n- Enhanced location selection dialogs with keyboard overflow fix\n- Added interested users list with direct chat for player requests\n- Disabled RevenueCat (no in-app purchases)\n- Filtered out past games from FindPlayers screen\n- Fixed navigation bar positioning for safe areas\n- Added deployment documentation and App Store review responses\n\n🚀 Generated with Claude Code\n\nCo-Authored-By: Claude <noreply@anthropic.com>\nEOF\n)\")"
     ],
     "deny": [],
     "ask": []

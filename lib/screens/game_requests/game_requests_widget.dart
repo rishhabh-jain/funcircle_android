@@ -34,7 +34,8 @@ class _GameRequestsWidgetState extends State<GameRequestsWidget>
   List<MyGameItem> _allGames = [];
   bool _isLoading = true;
   String? _errorMessage;
-  String _currentFilter = 'all';
+  String _currentFilter = 'upcoming'; // Default to upcoming (first tab)
+  String _sourceFilter = 'all'; // 'all', 'playnow', 'findplayers'
 
   @override
   void initState() {
@@ -56,7 +57,7 @@ class _GameRequestsWidgetState extends State<GameRequestsWidget>
 
   void _onTabChanged() {
     if (!_tabController.indexIsChanging) {
-      final filters = ['all', 'upcoming', 'past', 'cancelled'];
+      final filters = ['upcoming', 'past', 'cancelled', 'all'];
       setState(() {
         _currentFilter = filters[_tabController.index];
       });
@@ -127,16 +128,7 @@ class _GameRequestsWidgetState extends State<GameRequestsWidget>
         final requestData = await SupaFlow.client
             .schema('findplayers')
             .from('player_requests')
-            .select('''
-              *,
-              users!player_requests_user_id_fkey(
-                user_id,
-                first_name,
-                profile_picture,
-                skill_level_badminton,
-                skill_level_pickleball
-              )
-            ''')
+            .select('*')
             .eq('id', game.id)
             .maybeSingle();
 
@@ -152,8 +144,26 @@ class _GameRequestsWidgetState extends State<GameRequestsWidget>
           return;
         }
 
+        // Fetch user data separately from public schema
+        final userId = requestData['user_id'] as String?;
+        Map<String, dynamic>? userData;
+
+        if (userId != null) {
+          try {
+            userData = await SupaFlow.client
+                .from('users')
+                .select('user_id, first_name, profile_picture, skill_level_badminton, skill_level_pickleball')
+                .eq('user_id', userId)
+                .maybeSingle();
+          } catch (e) {
+            print('Error fetching user data: $e');
+          }
+        }
+
+        // Add user data to request data
+        requestData['users'] = userData;
+
         // Transform to PlayerRequestModel
-        final userData = requestData['users'];
 
         // Get user skill level based on sport type
         int? userSkillLevel;
@@ -245,6 +255,9 @@ class _GameRequestsWidgetState extends State<GameRequestsWidget>
                   // Tabs
                   _buildTabs(),
 
+                  // Source filter chips
+                  _buildSourceFilterChips(),
+
                   // Content
                   Expanded(
                     child: _isLoading
@@ -260,14 +273,7 @@ class _GameRequestsWidgetState extends State<GameRequestsWidget>
                                 : RefreshIndicator(
                                     onRefresh: _loadGames,
                                     color: Colors.orange,
-                                    child: ListView.builder(
-                                      padding: const EdgeInsets.all(20),
-                                      itemCount: _allGames.length,
-                                      itemBuilder: (context, index) {
-                                        final game = _allGames[index];
-                                        return _buildGameCard(game);
-                                      },
-                                    ),
+                                    child: _buildGroupedGamesList(),
                                   ),
                   ),
                 ],
@@ -275,6 +281,231 @@ class _GameRequestsWidgetState extends State<GameRequestsWidget>
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSourceFilterChips() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      child: Row(
+        children: [
+          _buildFilterChip(
+            label: 'All',
+            value: 'all',
+            icon: Icons.apps,
+            color: Colors.grey,
+          ),
+          const SizedBox(width: 8),
+          _buildFilterChip(
+            label: 'Play Now',
+            value: 'playnow',
+            icon: Icons.sports_tennis,
+            color: Colors.blue,
+          ),
+          const SizedBox(width: 8),
+          _buildFilterChip(
+            label: 'Find Players',
+            value: 'findplayers',
+            icon: Icons.person_search,
+            color: Colors.purple,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip({
+    required String label,
+    required String value,
+    required IconData icon,
+    required Color color,
+  }) {
+    final isSelected = _sourceFilter == value;
+
+    return Expanded(
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            _sourceFilter = value;
+          });
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          decoration: BoxDecoration(
+            gradient: isSelected
+                ? LinearGradient(
+                    colors: [
+                      color,
+                      color.withValues(alpha: 0.7),
+                    ],
+                  )
+                : null,
+            color: isSelected ? null : Colors.white.withValues(alpha: 0.05),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected
+                  ? color
+                  : Colors.white.withValues(alpha: 0.15),
+              width: isSelected ? 2 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                color: isSelected ? Colors.white : color,
+                size: 16,
+              ),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    color: isSelected ? Colors.white : color,
+                    fontSize: 12,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGroupedGamesList() {
+    // Filter games based on source filter
+    List<MyGameItem> filteredGames;
+
+    if (_sourceFilter == 'playnow') {
+      filteredGames = _allGames.where((g) => g.isPlayNow).toList();
+    } else if (_sourceFilter == 'findplayers') {
+      filteredGames = _allGames.where((g) => g.isFindPlayers).toList();
+    } else {
+      filteredGames = _allGames;
+    }
+
+    // If showing all, separate by type with headers
+    if (_sourceFilter == 'all') {
+      final playNowGames = filteredGames.where((g) => g.isPlayNow).toList();
+      final findPlayersRequests = filteredGames.where((g) => g.isFindPlayers).toList();
+
+      return ListView(
+        padding: const EdgeInsets.all(20),
+        children: [
+          // PlayNow Games Section
+          if (playNowGames.isNotEmpty) ...[
+            _buildSectionHeader('Play Now Games', playNowGames.length, Colors.blue),
+            const SizedBox(height: 12),
+            ...playNowGames.map((game) => _buildGameCard(game)).toList(),
+            const SizedBox(height: 24),
+          ],
+
+          // FindPlayers Requests Section
+          if (findPlayersRequests.isNotEmpty) ...[
+            _buildSectionHeader('Find Players Requests', findPlayersRequests.length, Colors.purple),
+            const SizedBox(height: 12),
+            ...findPlayersRequests.map((game) => _buildGameCard(game)).toList(),
+          ],
+        ],
+      );
+    } else {
+      // Show filtered games without section headers
+      if (filteredGames.isEmpty) {
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(40),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  _sourceFilter == 'playnow' ? Icons.sports_tennis : Icons.person_search,
+                  size: 64,
+                  color: _sourceFilter == 'playnow'
+                      ? Colors.blue.withValues(alpha: 0.3)
+                      : Colors.purple.withValues(alpha: 0.3),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  _sourceFilter == 'playnow'
+                      ? 'No Play Now games found'
+                      : 'No Find Players requests found',
+                  style: const TextStyle(
+                    color: Colors.white54,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }
+
+      return ListView.builder(
+        padding: const EdgeInsets.all(20),
+        itemCount: filteredGames.length,
+        itemBuilder: (context, index) {
+          return _buildGameCard(filteredGames[index]);
+        },
+      );
+    }
+  }
+
+  Widget _buildSectionHeader(String title, int count, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            color.withValues(alpha: 0.2),
+            color.withValues(alpha: 0.1),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: color.withValues(alpha: 0.3),
+          width: 1,
+        ),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            title.contains('Play Now') ? Icons.sports_tennis : Icons.person_search,
+            color: color,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Text(
+            title,
+            style: TextStyle(
+              color: color,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.5,
+            ),
+          ),
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              '$count',
+              style: TextStyle(
+                color: color,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -359,10 +590,10 @@ class _GameRequestsWidgetState extends State<GameRequestsWidget>
                 letterSpacing: 0.1,
               ),
               tabs: const [
-                Tab(text: 'All'),
                 Tab(text: 'Upcoming'),
                 Tab(text: 'Past'),
                 Tab(text: 'Cancelled'),
+                Tab(text: 'All'),
               ],
             ),
           ),

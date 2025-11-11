@@ -2,6 +2,7 @@ import '/backend/supabase/supabase.dart';
 import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
+import '/auth/firebase_auth/auth_util.dart';
 import '/screens/chat/widgets/room_invite_sheet.dart';
 import 'package:flutter/material.dart';
 import 'chat_room_info_model.dart';
@@ -106,6 +107,160 @@ class _ChatRoomInfoWidgetState extends State<ChatRoomInfoWidget> {
       safeSetState(() {
         _model.isLoadingMembers = false;
       });
+    }
+  }
+
+  Future<void> _leaveRoom() async {
+    if (widget.roomId == null || currentUserUid.isEmpty) return;
+
+    // Show confirmation dialog
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext dialogContext) {
+        return AlertDialog(
+          backgroundColor: FlutterFlowTheme.of(context).secondary,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16.0),
+          ),
+          title: Text(
+            'Leave Room',
+            style: FlutterFlowTheme.of(context).headlineSmall.override(
+                  fontFamily: FlutterFlowTheme.of(context).headlineSmallFamily,
+                  color: FlutterFlowTheme.of(context).info,
+                  letterSpacing: 0.0,
+                  useGoogleFonts:
+                      !FlutterFlowTheme.of(context).headlineSmallIsCustom,
+                ),
+          ),
+          content: Text(
+            'Are you sure you want to leave this room? You can be re-invited later.',
+            style: FlutterFlowTheme.of(context).bodyMedium.override(
+                  fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                  color: FlutterFlowTheme.of(context).secondaryText,
+                  letterSpacing: 0.0,
+                  useGoogleFonts:
+                      !FlutterFlowTheme.of(context).bodyMediumIsCustom,
+                ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: Text(
+                'Cancel',
+                style: FlutterFlowTheme.of(context).bodyMedium.override(
+                      fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                      color: FlutterFlowTheme.of(context).secondaryText,
+                      letterSpacing: 0.0,
+                      useGoogleFonts:
+                          !FlutterFlowTheme.of(context).bodyMediumIsCustom,
+                    ),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(
+                'Leave',
+                style: FlutterFlowTheme.of(context).bodyMedium.override(
+                      fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                      color: FlutterFlowTheme.of(context).error,
+                      letterSpacing: 0.0,
+                      fontWeight: FontWeight.w600,
+                      useGoogleFonts:
+                          !FlutterFlowTheme.of(context).bodyMediumIsCustom,
+                    ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirm != true) return;
+
+    try {
+      // Show loading
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => Center(
+          child: CircularProgressIndicator(
+            valueColor: AlwaysStoppedAnimation<Color>(
+              FlutterFlowTheme.of(context).primary,
+            ),
+          ),
+        ),
+      );
+
+      // Get user's name for the system message
+      String userName = 'A user';
+      try {
+        final userResponse = await SupaFlow.client
+            .from('users')
+            .select('first_name')
+            .eq('user_id', currentUserUid)
+            .single();
+        userName = userResponse['first_name'] ?? 'A user';
+      } catch (e) {
+        print('Could not fetch user name: $e');
+      }
+
+      // Create system message before leaving
+      try {
+        await SupaFlow.client
+            .schema('chat')
+            .from('messages')
+            .insert({
+              'room_id': widget.roomId!,
+              'sender_id': currentUserUid,
+              'content': '$userName has left the chat',
+              'message_type': 'system',
+              'created_at': DateTime.now().toUtc().toIso8601String(),
+            });
+      } catch (e) {
+        print('Could not create system message: $e');
+        // Continue with leaving even if system message fails
+      }
+
+      // Delete the user from room_members
+      await SupaFlow.client
+          .schema('chat')
+          .from('room_members')
+          .delete()
+          .eq('room_id', widget.roomId!)
+          .eq('user_id', currentUserUid);
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+
+        // Show success message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('You have left the room'),
+            backgroundColor: FlutterFlowTheme.of(context).success,
+            duration: Duration(seconds: 2),
+          ),
+        );
+
+        // Navigate back with result to trigger refresh
+        Navigator.of(context).pop('room_left');
+      }
+    } catch (e) {
+      print('Error leaving room: $e');
+
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+
+        // Show error message
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to leave room: $e'),
+            backgroundColor: FlutterFlowTheme.of(context).error,
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
     }
   }
 
@@ -560,6 +715,62 @@ class _ChatRoomInfoWidgetState extends State<ChatRoomInfoWidget> {
                               );
                             },
                           ),
+
+                    // Divider before leave button
+                    Padding(
+                      padding: EdgeInsetsDirectional.fromSTEB(0.0, 24.0, 0.0, 0.0),
+                      child: Divider(
+                        thickness: 1.0,
+                        color: FlutterFlowTheme.of(context).secondaryText
+                            .withValues(alpha: 0.2),
+                      ),
+                    ),
+
+                    // Leave Room Button
+                    Padding(
+                      padding:
+                          EdgeInsetsDirectional.fromSTEB(16.0, 16.0, 16.0, 32.0),
+                      child: InkWell(
+                        onTap: _leaveRoom,
+                        child: Container(
+                          padding: EdgeInsets.all(16.0),
+                          decoration: BoxDecoration(
+                            color: FlutterFlowTheme.of(context).error
+                                .withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12.0),
+                            border: Border.all(
+                              color: FlutterFlowTheme.of(context).error,
+                              width: 1.5,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.exit_to_app,
+                                color: FlutterFlowTheme.of(context).error,
+                                size: 24.0,
+                              ),
+                              SizedBox(width: 12.0),
+                              Text(
+                                'Leave Room',
+                                style: FlutterFlowTheme.of(context)
+                                    .titleMedium
+                                    .override(
+                                      fontFamily: FlutterFlowTheme.of(context)
+                                          .titleMediumFamily,
+                                      color: FlutterFlowTheme.of(context).error,
+                                      letterSpacing: 0.0,
+                                      fontWeight: FontWeight.w600,
+                                      useGoogleFonts: !FlutterFlowTheme.of(context)
+                                          .titleMediumIsCustom,
+                                    ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),

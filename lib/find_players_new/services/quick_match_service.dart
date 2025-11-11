@@ -361,9 +361,6 @@ class QuickMatchService {
       if (skillLevel != null) updates['skill_level'] = skillLevel;
       if (description != null) updates['description'] = description;
 
-      // Add edit tracking
-      updates['last_edited_at'] = DateTime.now().toIso8601String();
-
       // Update request
       await _client
           .schema('findplayers')

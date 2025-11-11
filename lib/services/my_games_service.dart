@@ -25,17 +25,17 @@ class MyGamesService {
             .select('*')
             .eq('user_id', userId);
 
-        // Apply status filters
+        // Apply status filters (only for cancelled, date-based filtering handles upcoming/past)
         if (filter != null && filter != 'all') {
           switch (filter.toLowerCase()) {
-            case 'upcoming':
-              requestsQuery = requestsQuery.eq('status', 'active');
-              break;
-            case 'past':
-              requestsQuery = requestsQuery.inFilter('status', ['fulfilled', 'expired']);
-              break;
             case 'cancelled':
               requestsQuery = requestsQuery.eq('status', 'cancelled');
+              break;
+            case 'upcoming':
+            case 'past':
+              // Don't filter by status at DB level - let date-based filtering handle it
+              // This ensures all games (active, fulfilled, expired) show up if they match the date criteria
+              requestsQuery = requestsQuery.neq('status', 'cancelled');
               break;
           }
         }
@@ -124,40 +124,36 @@ class MyGamesService {
       try {
         print('Fetching FindPlayers interested requests...');
 
-        var interestedQuery = _supabase
+        // First get all response IDs where user showed interest
+        var responsesQuery = _supabase
             .schema('findplayers')
-            .from('player_request_interests')
-            .select('''
-              request_id,
-              created_at,
-              player_requests:request_id!inner(
-                id,
-                user_id,
-                sport_type,
-                players_needed,
-                scheduled_time,
-                venue_id,
-                custom_location,
-                skill_level,
-                description,
-                status,
-                created_at
-              )
-            ''')
-            .eq('user_id', userId);
+            .from('player_request_responses')
+            .select('request_id, created_at')
+            .eq('responder_id', userId);
 
-        final interestedResults = await interestedQuery.order('created_at', ascending: false);
-        print('Received ${(interestedResults as List).length} interested requests');
+        final responsesResults = await responsesQuery.order('created_at', ascending: false);
+        print('Received ${(responsesResults as List).length} interested requests');
 
         // Transform interested requests into game items
-        for (final interest in interestedResults) {
+        for (final response in responsesResults) {
           try {
-            final request = interest['player_requests'];
-            if (request == null) continue;
+            final requestId = response['request_id'] as String?;
+            if (requestId == null) continue;
+
+            // Fetch the actual request details
+            final requestData = await _supabase
+                .schema('findplayers')
+                .from('player_requests')
+                .select('*')
+                .eq('id', requestId)
+                .maybeSingle();
+
+            if (requestData == null) continue;
+            final request = requestData;
 
             final scheduledTime = DateTime.parse(request['scheduled_time'] as String);
             final createdAt = DateTime.parse(request['created_at'] as String);
-            final interestedAt = DateTime.parse(interest['created_at'] as String);
+            final interestedAt = DateTime.parse(response['created_at'] as String);
 
             // Apply date-based filters
             if (filter == 'upcoming' && !scheduledTime.isAfter(now)) continue;
@@ -182,10 +178,9 @@ class MyGamesService {
                 itemStatus = 'open';
             }
 
-            // Apply status filters
-            if (filter == 'upcoming' && itemStatus != 'open') continue;
-            if (filter == 'past' && itemStatus != 'completed' && itemStatus != 'expired') continue;
+            // Apply status filters (cancelled only, date filtering already handled)
             if (filter == 'cancelled' && itemStatus != 'cancelled') continue;
+            if (filter != 'cancelled' && filter != 'all' && itemStatus == 'cancelled') continue;
 
             // Fetch venue details if venue_id exists
             String? venueName;
@@ -234,7 +229,6 @@ class MyGamesService {
         }
       } catch (e) {
         print('Error fetching interested requests: $e');
-        // Non-fatal error - table might not exist yet
       }
 
       // ============ FETCH PLAYNOW GAMES ============
@@ -269,17 +263,17 @@ class MyGamesService {
             ''')
             .eq('user_id', userId);
 
-        // Apply status filters
+        // Apply status filters (only for cancelled, date-based filtering handles upcoming/past)
         if (filter != null && filter != 'all') {
           switch (filter.toLowerCase()) {
-            case 'upcoming':
-              gamesQuery = gamesQuery.filter('games.status', 'in', '(open,full)');
-              break;
-            case 'past':
-              gamesQuery = gamesQuery.eq('games.status', 'completed');
-              break;
             case 'cancelled':
               gamesQuery = gamesQuery.eq('games.status', 'cancelled');
+              break;
+            case 'upcoming':
+            case 'past':
+              // Don't filter by status at DB level - let date-based filtering handle it
+              // This ensures all games (open, full, completed, etc.) show up if they match the date criteria
+              gamesQuery = gamesQuery.neq('games.status', 'cancelled');
               break;
           }
         }
@@ -380,8 +374,15 @@ class MyGamesService {
         print('Error fetching PlayNow games: $e');
       }
 
-      // Sort all games by scheduled date (upcoming first)
-      allGames.sort((a, b) => a.scheduledDateTime.compareTo(b.scheduledDateTime));
+      // Sort all games: paid games first, then by scheduled date (latest first)
+      allGames.sort((a, b) {
+        // First priority: paid games come before free games
+        if (a.isPaid && !b.isPaid) return -1;
+        if (!a.isPaid && b.isPaid) return 1;
+
+        // Second priority: sort by scheduled date (descending - latest first)
+        return b.scheduledDateTime.compareTo(a.scheduledDateTime);
+      });
 
       print('Successfully fetched ${allGames.length} total games (FindPlayers + PlayNow)');
       return allGames;

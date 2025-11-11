@@ -1244,52 +1244,54 @@ class _LocationSearchDialogState extends State<_LocationSearchDialog> {
       ),
       content: SizedBox(
         width: double.maxFinite,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _searchController,
-              onChanged: _searchPlaces,
-              style: FlutterFlowTheme.of(context).bodyMedium.override(
-                    fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                    color: Colors.white,
-                    letterSpacing: 0.0,
-                    useGoogleFonts:
-                        !FlutterFlowTheme.of(context).bodyMediumIsCustom,
-                  ),
-              decoration: InputDecoration(
-                hintText: 'Search for sector, city, or area',
-                hintStyle: FlutterFlowTheme.of(context).bodyMedium.override(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: _searchController,
+                onChanged: _searchPlaces,
+                style: FlutterFlowTheme.of(context).bodyMedium.override(
                       fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                      color: Colors.white.withValues(alpha: 0.5),
+                      color: Colors.white,
                       letterSpacing: 0.0,
                       useGoogleFonts:
                           !FlutterFlowTheme.of(context).bodyMediumIsCustom,
                     ),
-                prefixIcon: Icon(Icons.search,
-                    color: Colors.white.withValues(alpha: 0.7)),
-                filled: true,
-                fillColor: Colors.white.withValues(alpha: 0.1),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12.0),
-                  borderSide: BorderSide.none,
+                decoration: InputDecoration(
+                  hintText: 'Search for sector, city, or area',
+                  hintStyle: FlutterFlowTheme.of(context).bodyMedium.override(
+                        fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
+                        color: Colors.white.withValues(alpha: 0.5),
+                        letterSpacing: 0.0,
+                        useGoogleFonts:
+                            !FlutterFlowTheme.of(context).bodyMediumIsCustom,
+                      ),
+                  prefixIcon: Icon(Icons.search,
+                      color: Colors.white.withValues(alpha: 0.7)),
+                  filled: true,
+                  fillColor: Colors.white.withValues(alpha: 0.1),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12.0),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
               ),
-            ),
-            SizedBox(height: 16.0),
-            if (_isLoading)
-              CircularProgressIndicator(
-                valueColor: AlwaysStoppedAnimation<Color>(
-                  FlutterFlowTheme.of(context).primary,
-                ),
-              )
-            else if (_predictions.isNotEmpty)
-              ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: 300),
-                child: ListView.builder(
-                  shrinkWrap: true,
-                  itemCount: _predictions.length,
-                  itemBuilder: (context, index) {
+              SizedBox(height: 16.0),
+              if (_isLoading)
+                CircularProgressIndicator(
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    FlutterFlowTheme.of(context).primary,
+                  ),
+                )
+              else if (_predictions.isNotEmpty)
+                ConstrainedBox(
+                  constraints: BoxConstraints(maxHeight: 300),
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    physics: NeverScrollableScrollPhysics(),
+                    itemCount: _predictions.length,
+                    itemBuilder: (context, index) {
                     final prediction = _predictions[index];
                     final description = prediction['description'] ?? '';
                     final placeId = prediction['place_id'] ?? '';
@@ -1340,7 +1342,8 @@ class _LocationSearchDialogState extends State<_LocationSearchDialog> {
                   },
                 ),
               ),
-          ],
+            ],
+          ),
         ),
       ),
     );
