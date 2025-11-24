@@ -918,6 +918,22 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
           name: NewProfile.MyProfileWidget.routeName,
           path: NewProfile.MyProfileWidget.routePath,
           builder: (context, params) => NewProfile.MyProfileWidget(),
+        ),
+        // Organizer feature routes
+        FFRoute(
+          name: BecomeOrganizerIntroPage.routeName,
+          path: BecomeOrganizerIntroPage.routePath,
+          builder: (context, params) => BecomeOrganizerIntroPage(),
+        ),
+        FFRoute(
+          name: OrganizerApplicationPage.routeName,
+          path: OrganizerApplicationPage.routePath,
+          builder: (context, params) => OrganizerApplicationPage(),
+        ),
+        FFRoute(
+          name: AdminOrganizerPanel.routeName,
+          path: AdminOrganizerPanel.routePath,
+          builder: (context, params) => AdminOrganizerPanel(),
         )
       ].map((r) => r.toRoute(appStateNotifier)).toList(),
       observers: [routeObserver],

@@ -210,7 +210,7 @@ class _RequestsBottomPanelState extends State<RequestsBottomPanel>
             ? 70
             : (_sheetState == SheetState.expanded
                 ? MediaQuery.of(context).size.height * 0.7
-                : 360),
+                : 420),
         child: ClipRRect(
           borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
           child: BackdropFilter(
@@ -233,10 +233,13 @@ class _RequestsBottomPanelState extends State<RequestsBottomPanel>
                   ),
                 ],
               ),
-              // Add a top border separately
-              child: _isMinimized
-                  ? _buildMinimizedView(totalItems)
-                  : _buildExpandedCollapsedView(totalItems),
+              // Add a top border separately - ClipRect to prevent overflow during animation
+              child: ClipRect(
+                clipBehavior: Clip.hardEdge,
+                child: _isMinimized
+                    ? _buildMinimizedView(totalItems)
+                    : _buildExpandedCollapsedView(totalItems),
+              ),
             ),
           ),
         ),
@@ -614,7 +617,7 @@ class _RequestsBottomPanelState extends State<RequestsBottomPanel>
     }
 
     return SizedBox(
-      height: 260, // Fixed height for horizontal scroll
+      height: 280, // Fixed height for horizontal scroll
       child: ListView.builder(
         scrollDirection: Axis.horizontal,
         padding: const EdgeInsets.symmetric(horizontal: 16),

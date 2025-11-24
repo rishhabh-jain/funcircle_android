@@ -180,7 +180,15 @@ class FindPlayersNewModel extends FlutterFlowModel<FindPlayersNewWidget> {
 
   /// Apply filters to data
   List<PlayerRequestModel> get filteredRequests {
+    final now = DateTime.now();
+
     return playerRequests.where((request) {
+      // CRITICAL FIX: Always filter out past requests regardless of timeFilter
+      // This ensures old dates never appear even after button clicks
+      if (request.scheduledTime.isBefore(now)) {
+        return false;
+      }
+
       // Skill level filter
       if (selectedSkillLevel != null &&
           request.skillLevel != null &&
@@ -201,9 +209,8 @@ class FindPlayersNewModel extends FlutterFlowModel<FindPlayersNewWidget> {
         }
       }
 
-      // Time filter
+      // Additional time filter (optional - for further narrowing)
       if (timeFilter == 'today') {
-        final now = DateTime.now();
         final today = DateTime(now.year, now.month, now.day);
         final tomorrow = today.add(const Duration(days: 1));
         if (request.scheduledTime.isBefore(today) ||
@@ -211,7 +218,6 @@ class FindPlayersNewModel extends FlutterFlowModel<FindPlayersNewWidget> {
           return false;
         }
       } else if (timeFilter == 'this_week') {
-        final now = DateTime.now();
         final weekFromNow = now.add(const Duration(days: 7));
         if (request.scheduledTime.isAfter(weekFromNow)) {
           return false;
@@ -251,9 +257,15 @@ class FindPlayersNewModel extends FlutterFlowModel<FindPlayersNewWidget> {
 
   /// Get filtered game sessions
   List<GameSessionModel> get filteredSessions {
+    final now = DateTime.now();
     return gameSessions.where((session) {
       // Only show open sessions
       if (!session.isOpen) return false;
+
+      // CRITICAL FIX: Filter out past sessions (scheduled_time must be in future)
+      if (session.scheduledTime.isBefore(now)) {
+        return false;
+      }
 
       // Skill level filter
       if (selectedSkillLevel != null &&
@@ -295,9 +307,65 @@ class FindPlayersNewModel extends FlutterFlowModel<FindPlayersNewWidget> {
 
   /// Get filtered playnow games
   List<Map<String, dynamic>> get filteredPlayNowGames {
+    final now = DateTime.now();
+
     return playNowGames.where((game) {
       // Only show open games
       if (game['status'] != 'open') return false;
+
+      // CRITICAL FIX: Filter out past games by combining game_date AND start_time
+      final gameDateStr = game['game_date'] as String?;
+      final startTimeStr = game['start_time'] as String?;
+
+      if (gameDateStr != null && startTimeStr != null) {
+        try {
+          // Parse date (YYYY-MM-DD format)
+          final gameDate = DateTime.parse(gameDateStr);
+
+          // Parse time (HH:MM:SS format)
+          final timeParts = startTimeStr.split(':');
+          if (timeParts.length >= 2) {
+            final hour = int.parse(timeParts[0]);
+            final minute = int.parse(timeParts[1]);
+
+            // Combine date and time into full DateTime
+            final gameDateTime = DateTime(
+              gameDate.year,
+              gameDate.month,
+              gameDate.day,
+              hour,
+              minute,
+            );
+
+            // Game must be in the future (not just today, but future time)
+            if (gameDateTime.isBefore(now)) {
+              return false;  // Exclude past games
+            }
+          } else {
+            // If time format is invalid, fall back to date-only comparison
+            final today = DateTime(now.year, now.month, now.day);
+            if (gameDate.isBefore(today)) {
+              return false;
+            }
+          }
+        } catch (e) {
+          print('Error parsing game datetime: $e');
+          // If parsing fails, exclude the game to be safe
+          return false;
+        }
+      } else if (gameDateStr != null) {
+        // Fallback: If no start_time, just check date
+        try {
+          final gameDate = DateTime.parse(gameDateStr);
+          final today = DateTime(now.year, now.month, now.day);
+          if (gameDate.isBefore(today)) {
+            return false;
+          }
+        } catch (e) {
+          print('Error parsing game_date: $e');
+          return false;
+        }
+      }
 
       // Skill level filter
       if (selectedSkillLevel != null &&
@@ -330,6 +398,7 @@ class FindPlayersNewModel extends FlutterFlowModel<FindPlayersNewWidget> {
             markerId: gmaps.MarkerId('venue_${venue.id}'),
             position: gmaps.LatLng(venue.latitude, venue.longitude),
             icon: icon,
+            anchor: const Offset(0.5, 0.5), // Center anchor for circular marker - prevents moving
             infoWindow: gmaps.InfoWindow(title: venue.name),
             onTap: () => onVenueMarkerTapped?.call(venue),
           ),
@@ -342,12 +411,14 @@ class FindPlayersNewModel extends FlutterFlowModel<FindPlayersNewWidget> {
           profilePictureUrl: player.userProfilePicture,
           skillLevel: player.skillLevel,
           userName: player.userName ?? 'Unknown',
+          sportType: currentSport, // Pass current sport type
         );
         newMarkers.add(
           gmaps.Marker(
             markerId: gmaps.MarkerId('player_${player.id}'),
             position: gmaps.LatLng(player.latitude, player.longitude),
             icon: icon,
+            anchor: const Offset(0.5, 0.5), // Center anchor for circular marker
             infoWindow: gmaps.InfoWindow(
               title: player.userName ?? 'Player',
             ),
@@ -431,6 +502,10 @@ class FindPlayersNewModel extends FlutterFlowModel<FindPlayersNewWidget> {
         latitude: userLocation?.latitude,
         longitude: userLocation?.longitude,
       );
+
+      // IMPORTANT: Reload data to sync map with visibility change
+      // This ensures the user marker appears/disappears immediately
+      await loadMapData();
     } catch (e) {
       print('Error updating user visibility: $e');
       // Revert on error

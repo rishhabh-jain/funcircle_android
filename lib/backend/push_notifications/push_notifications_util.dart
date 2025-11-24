@@ -28,12 +28,22 @@ Stream<UserTokenInfo> getFcmTokenStream(String userPath) =>
           try {
             final settings = await FirebaseMessaging.instance.requestPermission();
             if (settings.authorizationStatus == AuthorizationStatus.authorized) {
-              // On iOS, get APNS token first
+              // On iOS, wait for APNS token with retry
               if (Platform.isIOS) {
-                try {
-                  await FirebaseMessaging.instance.getAPNSToken();
-                } catch (e) {
-                  print('APNS token not available (simulator or missing config): $e');
+                String? apnsToken;
+                // Retry up to 5 times with delay
+                for (int i = 0; i < 5; i++) {
+                  try {
+                    apnsToken = await FirebaseMessaging.instance.getAPNSToken();
+                    if (apnsToken != null) break;
+                  } catch (e) {
+                    // Token not ready yet
+                  }
+                  // Wait before retrying
+                  await Future.delayed(Duration(seconds: 1));
+                }
+                if (apnsToken == null) {
+                  print('APNS token not available after retries (simulator or missing config)');
                   return null;
                 }
               }

@@ -220,21 +220,61 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
           await _calculateVenueDistances();
         }
 
-        // Select nearest venue by default (only if matching venues exist)
-        if (_allVenues.isNotEmpty) {
+        // First check if there's a saved venue in app state
+        if (FFAppState().selectedVenueId != null) {
+          // Try to find the saved venue in current venues list
+          final savedVenueId = FFAppState().selectedVenueId!;
           final sortedVenues = _getSortedVenuesBySport();
-          if (sortedVenues.isNotEmpty) {
-            final nearestVenue = sortedVenues.first;
+          final savedVenueExists = sortedVenues.any((v) => v.id == savedVenueId);
+
+          if (savedVenueExists) {
+            // Restore saved venue
             safeSetState(() {
-              _model.selectedVenueId = nearestVenue.id;
-              _model.selectedVenueName = nearestVenue.venueName;
+              _model.selectedVenueId = FFAppState().selectedVenueId;
+              _model.selectedVenueName = FFAppState().selectedVenueName;
             });
           } else {
-            // No venues match the selected sport
-            safeSetState(() {
-              _model.selectedVenueId = null;
-              _model.selectedVenueName = null;
-            });
+            // Saved venue doesn't match current sport, select nearest
+            if (sortedVenues.isNotEmpty) {
+              final nearestVenue = sortedVenues.first;
+              safeSetState(() {
+                _model.selectedVenueId = nearestVenue.id;
+                _model.selectedVenueName = nearestVenue.venueName;
+              });
+              // Save to app state
+              FFAppState().update(() {
+                FFAppState().selectedVenueId = nearestVenue.id;
+                FFAppState().selectedVenueName = nearestVenue.venueName ?? '';
+              });
+            } else {
+              safeSetState(() {
+                _model.selectedVenueId = null;
+                _model.selectedVenueName = null;
+              });
+            }
+          }
+        } else {
+          // No saved venue, select nearest venue by default
+          if (_allVenues.isNotEmpty) {
+            final sortedVenues = _getSortedVenuesBySport();
+            if (sortedVenues.isNotEmpty) {
+              final nearestVenue = sortedVenues.first;
+              safeSetState(() {
+                _model.selectedVenueId = nearestVenue.id;
+                _model.selectedVenueName = nearestVenue.venueName;
+              });
+              // Save to app state
+              FFAppState().update(() {
+                FFAppState().selectedVenueId = nearestVenue.id;
+                FFAppState().selectedVenueName = nearestVenue.venueName ?? '';
+              });
+            } else {
+              // No venues match the selected sport
+              safeSetState(() {
+                _model.selectedVenueId = null;
+                _model.selectedVenueName = null;
+              });
+            }
           }
         }
 
@@ -430,6 +470,11 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
                 _model.selectedVenueId = sortedVenues.first.id;
                 _model.selectedVenueName = sortedVenues.first.venueName;
               });
+              // Save to app state
+              FFAppState().update(() {
+                FFAppState().selectedVenueId = sortedVenues.first.id;
+                FFAppState().selectedVenueName = sortedVenues.first.venueName ?? '';
+              });
 
               // Reload games for new venue and auto-select best time
               await _selectBestTimeOfDay();
@@ -500,6 +545,11 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
                           safeSetState(() {
                             _model.selectedVenueId = venue.id;
                             _model.selectedVenueName = venue.venueName;
+                          });
+                          // Save to app state
+                          FFAppState().update(() {
+                            FFAppState().selectedVenueId = venue.id;
+                            FFAppState().selectedVenueName = venue.venueName ?? '';
                           });
                           // Auto-select best AM/PM for the new venue
                           await _selectBestTimeOfDay();
@@ -780,6 +830,11 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
                     _model.selectedVenueId = sortedVenues.first.id;
                     _model.selectedVenueName = sortedVenues.first.venueName;
                   });
+                  // Save to app state
+                  FFAppState().update(() {
+                    FFAppState().selectedVenueId = sortedVenues.first.id;
+                    FFAppState().selectedVenueName = sortedVenues.first.venueName ?? '';
+                  });
 
                   // Reload games for new venue and auto-select best time
                   await _selectBestTimeOfDay();
@@ -862,6 +917,11 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
           if (sortedVenues.isNotEmpty) {
             _model.selectedVenueId = sortedVenues.first.id;
             _model.selectedVenueName = sortedVenues.first.venueName;
+            // Save to app state
+            FFAppState().update(() {
+              FFAppState().selectedVenueId = sortedVenues.first.id;
+              FFAppState().selectedVenueName = sortedVenues.first.venueName ?? '';
+            });
           } else {
             // No venues available for this sport
             _model.selectedVenueId = null;

@@ -29,6 +29,12 @@ class FFAppState extends ChangeNotifier {
     _safeInit(() {
       _locationDisplayText = prefs.getString('ff_locationDisplayText') ?? _locationDisplayText;
     });
+    _safeInit(() {
+      _selectedVenueId = prefs.getInt('ff_selectedVenueId');
+    });
+    _safeInit(() {
+      _selectedVenueName = prefs.getString('ff_selectedVenueName') ?? _selectedVenueName;
+    });
     // Reconstruct LatLng from persisted lat/lng
     if (_userLatitude != 0.0 && _userLongitude != 0.0) {
       _userLocation = LatLng(_userLatitude, _userLongitude);
@@ -128,6 +134,24 @@ class FFAppState extends ChangeNotifier {
   set locationDisplayText(String value) {
     _locationDisplayText = value;
     prefs.setString('ff_locationDisplayText', value);
+  }
+
+  int? _selectedVenueId;
+  int? get selectedVenueId => _selectedVenueId;
+  set selectedVenueId(int? value) {
+    _selectedVenueId = value;
+    if (value != null) {
+      prefs.setInt('ff_selectedVenueId', value);
+    } else {
+      prefs.remove('ff_selectedVenueId');
+    }
+  }
+
+  String _selectedVenueName = '';
+  String get selectedVenueName => _selectedVenueName;
+  set selectedVenueName(String value) {
+    _selectedVenueName = value;
+    prefs.setString('ff_selectedVenueName', value);
   }
 }
 

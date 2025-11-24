@@ -1,202 +1,92 @@
 import 'dart:ui' as ui;
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import '../models/skill_level.dart';
 
 /// Utility class for building custom map markers
 class MapMarkerBuilder {
-  /// Create marker for available player with name, time, and level
+  // Cached badminton icon image
+  static ui.Image? _badmintonIconImage;
+
+  /// Load and cache the badminton icon from assets
+  static Future<ui.Image?> _loadBadmintonIcon() async {
+    if (_badmintonIconImage != null) return _badmintonIconImage;
+
+    try {
+      final ByteData data = await rootBundle.load('assets/images/badminton_icon.png');
+      final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
+      final frame = await codec.getNextFrame();
+      _badmintonIconImage = frame.image;
+      return _badmintonIconImage;
+    } catch (e) {
+      print('Error loading badminton icon: $e');
+      return null;
+    }
+  }
+  /// Create marker for available player with sport icon and green glow
+  /// REDESIGNED: Simple, small, with green glowing circle and sport icon only
   static Future<BitmapDescriptor> createPlayerMarker({
     required String? profilePictureUrl,
     required int? skillLevel,
     required String userName,
+    String sportType = 'badminton',
   }) async {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    const markerSize = 100.0;
-    const labelPadding = 8.0;
+    const size = 80.0; // Smaller size
+    const center = Offset(size / 2, size / 2);
 
-    // Get skill level info
-    final skillLevelEnum =
-        skillLevel != null ? SkillLevel.fromValue(skillLevel) : null;
-    final skillText = skillLevelEnum?.label ?? 'New';
-
-    // Create multi-line label with name, time, and level
-    final namePainter = TextPainter(
-      text: TextSpan(
-        text: userName,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 13,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    );
-    namePainter.layout();
-
-    final timePainter = TextPainter(
-      text: const TextSpan(
-        text: 'Online now',
-        style: TextStyle(
-          color: Colors.white70,
-          fontSize: 10,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    );
-    timePainter.layout();
-
-    final levelPainter = TextPainter(
-      text: TextSpan(
-        text: 'Level: $skillText',
-        style: TextStyle(
-          color: skillLevelEnum != null
-              ? _hexToColor(skillLevelEnum.hexColor)
-              : Colors.grey,
-          fontSize: 10,
-          fontWeight: FontWeight.w600,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    );
-    levelPainter.layout();
-
-    final maxWidth = [namePainter.width, timePainter.width, levelPainter.width]
-        .reduce((a, b) => a > b ? a : b);
-    final totalWidth = markerSize + labelPadding + maxWidth + 20;
-    final totalHeight = markerSize + 15;
-
-    // Draw shadow for 3D effect
-    final shadowPaint = Paint()
-      ..color = Colors.black.withValues(alpha: 0.3)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
-    canvas.drawCircle(
-        const Offset(markerSize / 2 + 3, markerSize / 2 + 4), 38, shadowPaint);
-
-    // Draw skill level color ring
-    if (skillLevel != null) {
-      final skillLevelEnum = SkillLevel.fromValue(skillLevel);
-      final ringPaint = Paint()
-        ..color = _hexToColor(skillLevelEnum.hexColor)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 5.0;
-
-      canvas.drawCircle(
-        const Offset(markerSize / 2, markerSize / 2),
-        38,
-        ringPaint,
-      );
+    // Draw green glowing effect (multiple layers for glow)
+    for (int i = 3; i > 0; i--) {
+      final glowPaint = Paint()
+        ..color = const Color(0xFF4CAF50).withValues(alpha: 0.15 * i)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 8.0 * i);
+      canvas.drawCircle(center, 20 + (i * 4), glowPaint);
     }
 
-    // Draw white background circle
-    final bgPaint = Paint()
+    // Draw outer green circle (bright green)
+    final outerCirclePaint = Paint()
+      ..color = const Color(0xFF4CAF50)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(center, 24, outerCirclePaint);
+
+    // Draw white border
+    final borderPaint = Paint()
       ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.0;
+    canvas.drawCircle(center, 24, borderPaint);
+
+    // Draw inner circle (slightly darker green)
+    final innerCirclePaint = Paint()
+      ..color = const Color(0xFF2E7D32)
       ..style = PaintingStyle.fill;
-    canvas.drawCircle(
-        const Offset(markerSize / 2, markerSize / 2), 34, bgPaint);
+    canvas.drawCircle(center, 21, innerCirclePaint);
 
-    // Draw profile picture or placeholder
-    if (profilePictureUrl != null && profilePictureUrl.isNotEmpty) {
-      try {
-        final imageBytes = await _getImageBytes(profilePictureUrl);
-        final codec = await ui.instantiateImageCodec(
-          imageBytes,
-          targetWidth: 60,
-          targetHeight: 60,
-        );
-        final frame = await codec.getNextFrame();
-        final image = frame.image;
-
-        // Clip to circle and draw image
-        canvas.save();
-        final clipPath = Path()
-          ..addOval(
-            Rect.fromCircle(
-                center: const Offset(markerSize / 2, markerSize / 2),
-                radius: 32),
-          );
-        canvas.clipPath(clipPath);
-        canvas.drawImageRect(
-          image,
-          Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()),
-          Rect.fromCircle(
-              center: const Offset(markerSize / 2, markerSize / 2), radius: 32),
-          Paint(),
-        );
-        canvas.restore();
-      } catch (e) {
-        print('Error loading profile image: $e');
-        _drawPlaceholderIcon(canvas, markerSize);
-      }
+    // Draw custom sport icon in center
+    if (sportType.toLowerCase() == 'pickleball') {
+      _drawPickleballPaddle(canvas, center, Colors.white, 18);
     } else {
-      _drawPlaceholderIcon(canvas, markerSize);
+      _drawBadmintonShuttlecock(canvas, center, Colors.white, 18);
     }
 
-    // Draw 3D pointer at bottom with shadow
-    final pointerShadowPath = Path()
-      ..moveTo(markerSize / 2 - 10, markerSize - 24)
-      ..lineTo(markerSize / 2 + 2, markerSize + 8)
-      ..lineTo(markerSize / 2 + 12, markerSize - 24)
-      ..close();
-    canvas.drawPath(pointerShadowPath,
-        Paint()..color = Colors.black.withValues(alpha: 0.2));
+    // Draw pulsing indicator dot (small dot at bottom right for "online" status)
+    final indicatorPaint = Paint()
+      ..color = const Color(0xFF00FF00) // Bright lime green
+      ..style = PaintingStyle.fill
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+    canvas.drawCircle(Offset(center.dx + 16, center.dy + 16), 5, indicatorPaint);
 
-    final pointerPath = Path()
-      ..moveTo(markerSize / 2 - 10, markerSize - 24)
-      ..lineTo(markerSize / 2, markerSize + 3)
-      ..lineTo(markerSize / 2 + 10, markerSize - 24)
-      ..close();
-
-    final pointerPaint = Paint()
-      ..color = skillLevel != null
-          ? _hexToColor(SkillLevel.fromValue(skillLevel).hexColor)
-          : Colors.green
-      ..style = PaintingStyle.fill;
-    canvas.drawPath(pointerPath, pointerPaint);
-
-    // Draw text label to the right of marker with multiple lines
-    final labelBg = Paint()
-      ..color = Colors.black.withValues(alpha: 0.75)
-      ..style = PaintingStyle.fill;
-    final labelHeight = 48.0;
-    final labelRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(
-        markerSize + labelPadding,
-        markerSize / 2 - labelHeight / 2,
-        maxWidth + 16,
-        labelHeight,
-      ),
-      const Radius.circular(10),
-    );
-    canvas.drawRRect(labelRect, labelBg);
-
-    // Draw name
-    namePainter.paint(
-      canvas,
-      Offset(
-          markerSize + labelPadding + 8, markerSize / 2 - labelHeight / 2 + 6),
-    );
-
-    // Draw time
-    timePainter.paint(
-      canvas,
-      Offset(
-          markerSize + labelPadding + 8, markerSize / 2 - labelHeight / 2 + 22),
-    );
-
-    // Draw level
-    levelPainter.paint(
-      canvas,
-      Offset(
-          markerSize + labelPadding + 8, markerSize / 2 - labelHeight / 2 + 34),
-    );
+    // Add white border to indicator
+    final indicatorBorderPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+    canvas.drawCircle(
+        Offset(center.dx + 16, center.dy + 16), 5, indicatorBorderPaint);
 
     final picture = recorder.endRecording();
-    final img = await picture.toImage(totalWidth.toInt(), totalHeight.toInt());
+    final img = await picture.toImage(size.toInt(), size.toInt());
     final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
 
     return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
@@ -307,133 +197,81 @@ class MapMarkerBuilder {
     return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
   }
 
-  /// Create 3D marker for venue with label and sport-specific styling
+  /// Create circular marker for venue - small, simple, no label, properly anchored
+  /// REDESIGNED: Small circular marker that stays in place when map moves
   static Future<BitmapDescriptor> createVenueMarker({
     required String venueName,
     required String? sportType,
   }) async {
     final recorder = ui.PictureRecorder();
     final canvas = Canvas(recorder);
-    const markerSize = 85.0;
-    const labelPadding = 8.0;
+    const size = 70.0; // Small size
+    const center = Offset(size / 2, size / 2);
 
-    // Determine color and icon based on sport type
+    // Determine color based on sport type
     Color pinColor;
-    Color labelColor;
-    IconData iconData;
+    String sportTypeForIcon;
 
     switch (sportType?.toLowerCase()) {
       case 'badminton':
-        pinColor = const Color(0xFF00BFA5); // Teal/cyan for badminton
-        labelColor = const Color(0xFF00BFA5);
-        iconData = Icons.sports_tennis; // Racquet sports icon
+        pinColor = const Color(0xFF00BFA5); // Teal for badminton
+        sportTypeForIcon = 'badminton';
         break;
       case 'pickleball':
         pinColor = const Color(0xFFFF9800); // Orange for pickleball
-        labelColor = const Color(0xFFFF9800);
-        iconData = Icons.sports_baseball; // Paddle sports icon
+        sportTypeForIcon = 'pickleball';
         break;
       case 'both':
-        pinColor = const Color(0xFF9C27B0); // Purple for both sports
-        labelColor = const Color(0xFF9C27B0);
-        iconData = Icons.sports; // General sports icon
+        pinColor = const Color(0xFF9C27B0); // Purple for both
+        sportTypeForIcon = 'both';
         break;
       default:
-        pinColor = Colors.blue; // Default blue
-        labelColor = Colors.blue;
-        iconData = Icons.location_city;
+        pinColor = const Color(0xFF2196F3); // Blue default
+        sportTypeForIcon = 'badminton'; // default to badminton
     }
 
-    // Create label text
-    final labelPainter = TextPainter(
-      text: TextSpan(
-        text: venueName,
-        style: const TextStyle(
-          color: Colors.white,
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          shadows: [
-            Shadow(
-              offset: Offset(1, 1),
-              blurRadius: 3,
-              color: Color.fromARGB(150, 0, 0, 0),
-            ),
-          ],
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-      maxLines: 1,
-      ellipsis: '...',
-    );
-    labelPainter.layout(maxWidth: 150); // Limit width
+    // Draw shadow
+    final shadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.3)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5);
+    canvas.drawCircle(Offset(center.dx + 2, center.dy + 2), 22, shadowPaint);
 
-    final totalWidth = markerSize + labelPadding + labelPainter.width + 20;
-    final totalHeight = markerSize + 5;
-
-    // Draw shadow for 3D effect
-    final shadowPath = Path()
-      ..addOval(Rect.fromCircle(
-          center: const Offset(markerSize / 2 + 3, markerSize / 2.5 + 3),
-          radius: 26))
-      ..moveTo(markerSize / 2 - 10, markerSize / 1.8)
-      ..lineTo(markerSize / 2 + 2, markerSize - 2)
-      ..lineTo(markerSize / 2 + 12, markerSize / 1.8)
-      ..close();
-    canvas.drawPath(
-        shadowPath,
-        Paint()
-          ..color = Colors.black.withValues(alpha: 0.3)
-          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 5));
-
-    // Draw location pin shape with sport-specific color
-    final pinPath = Path()
-      ..addOval(Rect.fromCircle(
-          center: const Offset(markerSize / 2, markerSize / 2.5), radius: 26))
-      ..moveTo(markerSize / 2 - 10, markerSize / 1.8)
-      ..lineTo(markerSize / 2, markerSize - 5)
-      ..lineTo(markerSize / 2 + 10, markerSize / 1.8)
-      ..close();
-
-    final pinPaint = Paint()
+    // Draw outer circle with sport color
+    final outerPaint = Paint()
       ..color = pinColor
       ..style = PaintingStyle.fill;
-    canvas.drawPath(pinPath, pinPaint);
+    canvas.drawCircle(center, 20, outerPaint);
 
     // Draw white border
     final borderPaint = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 4.0;
-    canvas.drawCircle(
-        const Offset(markerSize / 2, markerSize / 2.5), 26, borderPaint);
+      ..strokeWidth = 3.0;
+    canvas.drawCircle(center, 20, borderPaint);
 
-    // Draw sport-specific icon in center
-    _drawIcon(canvas, iconData, const Offset(markerSize / 2, markerSize / 2.5),
-        Colors.white, 26);
+    // Draw custom sport icon in center
+    final badmintonIcon = await _loadBadmintonIcon();
 
-    // Draw text label to the right of marker with sport-specific color
-    final labelBg = Paint()
-      ..color = labelColor.withValues(alpha: 0.9)
-      ..style = PaintingStyle.fill;
-    final labelRect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(
-        markerSize + labelPadding,
-        markerSize / 2 - 12,
-        labelPainter.width + 12,
-        24,
-      ),
-      const Radius.circular(12),
-    );
-    canvas.drawRRect(labelRect, labelBg);
-
-    labelPainter.paint(
-      canvas,
-      Offset(markerSize + labelPadding + 6,
-          markerSize / 2 - labelPainter.height / 2),
-    );
+    if (sportTypeForIcon == 'both') {
+      // For venues with both sports, draw both icons smaller and side by side
+      if (badmintonIcon != null) {
+        _drawBadmintonIcon(canvas, Offset(center.dx - 6, center.dy), badmintonIcon, 12);
+      } else {
+        _drawBadmintonShuttlecock(canvas, Offset(center.dx - 6, center.dy), Colors.white, 12);
+      }
+      _drawPickleballPaddle(canvas, Offset(center.dx + 6, center.dy), Colors.white, 12);
+    } else if (sportTypeForIcon == 'pickleball') {
+      _drawPickleballPaddle(canvas, center, Colors.white, 16);
+    } else {
+      if (badmintonIcon != null) {
+        _drawBadmintonIcon(canvas, center, badmintonIcon, 16);
+      } else {
+        _drawBadmintonShuttlecock(canvas, center, Colors.white, 16);
+      }
+    }
 
     final picture = recorder.endRecording();
-    final img = await picture.toImage(totalWidth.toInt(), totalHeight.toInt());
+    final img = await picture.toImage(size.toInt(), size.toInt());
     final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
 
     return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
@@ -545,12 +383,6 @@ class MapMarkerBuilder {
     return BitmapDescriptor.bytes(bytes!.buffer.asUint8List());
   }
 
-  /// Helper: Draw placeholder icon for missing profile picture
-  static void _drawPlaceholderIcon(Canvas canvas, double size) {
-    _drawIcon(
-        canvas, Icons.person, Offset(size / 2, size / 2), Colors.grey, 40);
-  }
-
   /// Helper: Draw icon on canvas
   static void _drawIcon(
       Canvas canvas, IconData icon, Offset center, Color color,
@@ -574,38 +406,146 @@ class MapMarkerBuilder {
     );
   }
 
-  /// Helper: Convert hex color to Color
-  static Color _hexToColor(String hexString) {
-    final buffer = StringBuffer();
-    if (hexString.length == 6 || hexString.length == 7) buffer.write('ff');
-    buffer.write(hexString.replaceFirst('#', ''));
-    return Color(int.parse(buffer.toString(), radix: 16));
+  /// Draw badminton icon from loaded image with white color
+  static void _drawBadmintonIcon(
+      Canvas canvas, Offset center, ui.Image image, double size) {
+    // Calculate the destination rect (centered)
+    final destRect = Rect.fromCenter(
+      center: center,
+      width: size * 2,
+      height: size * 2,
+    );
+
+    // Source rect (full image)
+    final srcRect = Rect.fromLTWH(
+      0,
+      0,
+      image.width.toDouble(),
+      image.height.toDouble(),
+    );
+
+    // Paint with white color blend to make the black icon white
+    final paint = Paint()
+      ..colorFilter = const ColorFilter.mode(
+        Colors.white,
+        BlendMode.srcIn,
+      );
+
+    canvas.drawImageRect(image, srcRect, destRect, paint);
   }
 
-  /// Helper: Get image bytes from URL
-  static Future<Uint8List> _getImageBytes(String url) async {
-    try {
-      final provider = CachedNetworkImageProvider(url);
-      final imageStream = provider.resolve(const ImageConfiguration());
-      final completer = Completer<ui.Image>();
-      final listener = ImageStreamListener((ImageInfo info, bool _) {
-        completer.complete(info.image);
-      });
-      imageStream.addListener(listener);
-      final image = await completer.future;
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      return byteData!.buffer.asUint8List();
-    } catch (e) {
-      // If network image fails, return a placeholder
-      final recorder = ui.PictureRecorder();
-      final canvas = Canvas(recorder);
-      const size = 60.0;
-      final paint = Paint()..color = Colors.grey;
-      canvas.drawCircle(const Offset(size / 2, size / 2), size / 2, paint);
-      final picture = recorder.endRecording();
-      final img = await picture.toImage(size.toInt(), size.toInt());
-      final bytes = await img.toByteData(format: ui.ImageByteFormat.png);
-      return bytes!.buffer.asUint8List();
+  /// Draw custom badminton shuttlecock icon - REDESIGNED for clarity (fallback)
+  static void _drawBadmintonShuttlecock(
+      Canvas canvas, Offset center, Color color, double size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final strokePaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+
+    // IMPROVED DESIGN: Simple, bold, instantly recognizable
+
+    // Draw cork/rubber base (solid circle at bottom - more prominent)
+    canvas.drawCircle(
+      Offset(center.dx, center.dy + size * 0.35),
+      size * 0.25,
+      paint,
+    );
+
+    // Draw feather cone (wider, more distinct triangle)
+    final featherPath = Path()
+      ..moveTo(center.dx - size * 0.5, center.dy - size * 0.25) // Left point
+      ..lineTo(center.dx, center.dy + size * 0.3) // Bottom center
+      ..lineTo(center.dx + size * 0.5, center.dy - size * 0.25) // Right point
+      ..close();
+    canvas.drawPath(featherPath, strokePaint);
+
+    // Fill the cone slightly for better visibility
+    canvas.drawPath(
+      featherPath,
+      Paint()
+        ..color = color.withValues(alpha: 0.3)
+        ..style = PaintingStyle.fill,
+    );
+
+    // Draw bold center line (shuttlecock seam)
+    canvas.drawLine(
+      Offset(center.dx, center.dy - size * 0.25),
+      Offset(center.dx, center.dy + size * 0.3),
+      Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.5,
+    );
+
+    // Draw 2 angled lines on each side for feather detail (simplified, bolder)
+    final featherStroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+
+    // Left feathers
+    canvas.drawLine(
+      Offset(center.dx - size * 0.35, center.dy - size * 0.15),
+      Offset(center.dx - size * 0.1, center.dy + size * 0.2),
+      featherStroke,
+    );
+
+    // Right feathers
+    canvas.drawLine(
+      Offset(center.dx + size * 0.35, center.dy - size * 0.15),
+      Offset(center.dx + size * 0.1, center.dy + size * 0.2),
+      featherStroke,
+    );
+  }
+
+  /// Draw custom pickleball paddle icon
+  static void _drawPickleballPaddle(
+      Canvas canvas, Offset center, Color color, double size) {
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final strokePaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+
+    // Draw paddle face (rounded rectangle)
+    final paddleFace = RRect.fromRectAndRadius(
+      Rect.fromCenter(
+        center: Offset(center.dx, center.dy - size * 0.15),
+        width: size * 0.8,
+        height: size * 0.9,
+      ),
+      Radius.circular(size * 0.25),
+    );
+    canvas.drawRRect(paddleFace, strokePaint);
+
+    // Draw handle
+    final handleRect = Rect.fromCenter(
+      center: Offset(center.dx, center.dy + size * 0.45),
+      width: size * 0.3,
+      height: size * 0.35,
+    );
+    canvas.drawRect(handleRect, paint);
+
+    // Draw holes on paddle face (pickleball paddles have holes)
+    final holeRadius = size * 0.08;
+    final holePaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    // 3x3 grid of holes
+    for (int row = 0; row < 3; row++) {
+      for (int col = 0; col < 3; col++) {
+        final holeX = center.dx - size * 0.25 + (col * size * 0.25);
+        final holeY = center.dy - size * 0.35 + (row * size * 0.25);
+        canvas.drawCircle(Offset(holeX, holeY), holeRadius, holePaint);
+      }
     }
   }
 }

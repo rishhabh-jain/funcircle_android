@@ -144,3 +144,7 @@ export '/screens/play_friends/my_play_friends_widget.dart' show MyPlayFriendsWid
 export '/screens/notifications/notifications_screen_widget.dart' show NotificationsScreenWidget;
 export '/screens/referrals/referrals_screen_widget.dart' show ReferralsScreenWidget;
 export '/venue_booking/venue_booking_widget.dart' show VenueBookingWidget;
+// Organizer feature
+export '/organizer/pages/become_organizer_intro_page.dart' show BecomeOrganizerIntroPage;
+export '/organizer/pages/organizer_application_page.dart' show OrganizerApplicationPage;
+export '/organizer/pages/admin_organizer_panel.dart' show AdminOrganizerPanel;

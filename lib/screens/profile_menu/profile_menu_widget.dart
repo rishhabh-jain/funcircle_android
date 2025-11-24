@@ -22,11 +22,32 @@ class ProfileMenuWidget extends StatefulWidget {
 class _ProfileMenuWidgetState extends State<ProfileMenuWidget> {
   late ProfileMenuModel _model;
   final scaffoldKey = GlobalKey<ScaffoldState>();
+  bool isAdmin = false;
 
   @override
   void initState() {
     super.initState();
     _model = createModel(context, () => ProfileMenuModel());
+    _checkAdminStatus();
+  }
+
+  Future<void> _checkAdminStatus() async {
+    try {
+      final response = await SupaFlow.client
+          .from('users')
+          .select('is_admin')
+          .eq('user_id', currentUserUid)
+          .maybeSingle();
+
+      if (mounted && response != null && response['is_admin'] == true) {
+        setState(() {
+          isAdmin = true;
+        });
+      }
+    } catch (e) {
+      // Silently fail - just means no admin access
+      print('Error checking admin status: $e');
+    }
   }
 
   @override
@@ -545,6 +566,14 @@ class _ProfileMenuWidgetState extends State<ProfileMenuWidget> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Become an Organizer Card
+          _buildBecomeOrganizerCard(),
+          const SizedBox(height: 16),
+          // Admin Panel Card (only shown for admins)
+          if (isAdmin) ...[
+            _buildAdminPanelCard(),
+            const SizedBox(height: 16),
+          ],
           // Refer & Earn Card (replacing Quick Access title)
           _buildReferEarnCard(),
           const SizedBox(height: 24),
@@ -596,6 +625,230 @@ class _ProfileMenuWidgetState extends State<ProfileMenuWidget> {
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildBecomeOrganizerCard() {
+    return InkWell(
+      onTap: () => context.pushNamed('becomeOrganizer'),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              blurRadius: 8,
+              color: Colors.greenAccent.shade400.withValues(alpha: 0.2),
+              offset: Offset(0, 4),
+              spreadRadius: 0,
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: Colors.greenAccent.shade400.withValues(alpha: 0.3),
+                  width: 1.5,
+                ),
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.greenAccent.shade400.withValues(alpha: 0.15),
+                    Colors.greenAccent.shade700.withValues(alpha: 0.1),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: Row(
+                  children: [
+                    // Icon
+                    Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withValues(alpha: 0.25),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.4),
+                          width: 2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            blurRadius: 8,
+                            color: Colors.black.withValues(alpha: 0.15),
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.verified_rounded,
+                        color: Colors.white,
+                        size: 26,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    // Text content
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Become an Organizer',
+                            style: TextStyle(
+                              fontFamily: 'Readex Pro',
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Host FunCircle PlayTime games',
+                            style: TextStyle(
+                              fontFamily: 'Readex Pro',
+                              color: Colors.white.withValues(alpha: 0.9),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Arrow icon
+                    Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      color: Colors.white.withValues(alpha: 0.85),
+                      size: 18,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAdminPanelCard() {
+    return InkWell(
+      onTap: () => context.pushNamed('adminOrganizerPanel'),
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        width: double.infinity,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              blurRadius: 8,
+              color: Colors.purple.shade400.withValues(alpha: 0.2),
+              offset: Offset(0, 4),
+              spreadRadius: 0,
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: Colors.purple.shade400.withValues(alpha: 0.3),
+                  width: 1.5,
+                ),
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.purple.shade400.withValues(alpha: 0.15),
+                    Colors.purple.shade700.withValues(alpha: 0.1),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                child: Row(
+                  children: [
+                    // Icon
+                    Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.white.withValues(alpha: 0.25),
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.4),
+                          width: 2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            blurRadius: 8,
+                            color: Colors.black.withValues(alpha: 0.15),
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.admin_panel_settings,
+                        color: Colors.white,
+                        size: 26,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    // Text content
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Admin Panel',
+                            style: TextStyle(
+                              fontFamily: 'Readex Pro',
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Manage organizer applications',
+                            style: TextStyle(
+                              fontFamily: 'Readex Pro',
+                              color: Colors.white.withValues(alpha: 0.9),
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    // Arrow icon
+                    Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      color: Colors.white.withValues(alpha: 0.85),
+                      size: 18,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }

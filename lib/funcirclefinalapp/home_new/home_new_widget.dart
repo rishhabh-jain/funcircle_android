@@ -328,55 +328,45 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
   }
 
   Widget _buildSportsAnimation() {
-    return TweenAnimationBuilder<double>(
-      tween: Tween(begin: 0.0, end: 1.0),
-      duration: const Duration(milliseconds: 1200),
-      curve: Curves.easeOutBack,
-      builder: (context, value, child) {
-        final clampedValue = value.clamp(0.0, 1.0);
-        return Transform.scale(
-          scale: value,
-          child: Opacity(
-            opacity: clampedValue,
-            child: InkWell(
-              onTap: () {
-                context.pushNamed('findPlayersNew');
-              },
-              borderRadius: BorderRadius.circular(20),
-              child: Container(
-                height: 140,
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(20),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.white.withValues(alpha: 0.15),
-                      Colors.white.withValues(alpha: 0.08),
-                    ],
-                  ),
-                  border: Border.all(
-                    color: Colors.white.withValues(alpha: 0.3),
-                    width: 1.5,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.3),
-                      blurRadius: 20,
-                      spreadRadius: 0,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Stack(
-                  children: [
-                    // Animated sports icons
-                    // Cricket (top left)
-                    Positioned(
-                      left: 15 + (value * 8),
-                      top: 15,
-                      child: Transform.rotate(
-                        angle: value * 0.3,
+    return InkWell(
+      onTap: () {
+        context.pushNamed('findPlayersNew');
+      },
+      borderRadius: BorderRadius.circular(20),
+      child: Container(
+        height: 140,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white.withValues(alpha: 0.15),
+              Colors.white.withValues(alpha: 0.08),
+            ],
+          ),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.3),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 20,
+              spreadRadius: 0,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            // Sports icons
+            // Cricket (top left)
+            Positioned(
+              left: 23,
+              top: 15,
+              child: Transform.rotate(
+                angle: 0.3,
                         child: Icon(
                           Icons.sports_cricket,
                           size: 38,
@@ -389,7 +379,7 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                       left: 70,
                       top: 20,
                       child: Transform.rotate(
-                        angle: -value * 0.2,
+                        angle: -0.2,
                         child: Icon(
                           Icons
                               .sports_tennis, // Using tennis as badminton placeholder
@@ -400,10 +390,10 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                     ),
                     // Football/Soccer (top right)
                     Positioned(
-                      right: 20 - (value * 8),
+                      right: 12,
                       top: 18,
                       child: Transform.rotate(
-                        angle: -value * 0.3,
+                        angle: -0.3,
                         child: Icon(
                           Icons.sports_soccer,
                           size: 36,
@@ -416,7 +406,7 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                       left: 25,
                       bottom: 20,
                       child: Transform.rotate(
-                        angle: value * 0.2,
+                        angle: 0.2,
                         child: Icon(
                           Icons.sports_basketball,
                           size: 30,
@@ -439,7 +429,7 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                       right: 18,
                       bottom: 25,
                       child: Transform.rotate(
-                        angle: -value * 0.15,
+                        angle: -0.15,
                         child: Icon(
                           Icons.sports_volleyball,
                           size: 28,
@@ -619,10 +609,6 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                   ],
                 ),
               ),
-            ),
-          ),
-        );
-      },
     );
   }
 
@@ -2392,18 +2378,6 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                             ],
                           );
                         },
-                      ),
-                      Padding(
-                        padding: EdgeInsets.all(8.0),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(12.0),
-                          child: Image.asset(
-                            'assets/images/WhatsApp_Image_2025-09-12_at_10.45.19_PM.jpeg',
-                            width: double.infinity,
-                            height: 167.7,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
                       ),
                       // Footer Section
                       Padding(

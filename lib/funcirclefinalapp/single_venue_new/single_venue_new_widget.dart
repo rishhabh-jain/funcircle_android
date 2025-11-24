@@ -80,7 +80,65 @@ class _SingleVenueNewWidgetState extends State<SingleVenueNewWidget> {
           .order('start_time')
           .limit(10);
 
-      return List<Map<String, dynamic>>.from(response as List);
+      final gamesList = List<Map<String, dynamic>>.from(response as List);
+
+      // Fetch creator details in batch for all games
+      final creatorIds = gamesList
+          .map((g) => g['created_by'] as String?)
+          .where((id) => id != null)
+          .toSet()
+          .toList();
+
+      // Fetch all creators at once
+      Map<String, Map<String, dynamic>> creatorsMap = {};
+      if (creatorIds.isNotEmpty) {
+        try {
+          final creatorsResponse = await SupaFlow.client
+              .from('users')
+              .select('user_id, first_name, profile_picture')
+              .inFilter('user_id', creatorIds);
+
+          for (final creator in (creatorsResponse as List)) {
+            creatorsMap[creator['user_id'] as String] = creator;
+          }
+        } catch (e) {
+          print('Error fetching creators: $e');
+        }
+      }
+
+      // Get venue name (since we're on the venue page, fetch it once)
+      String? venueName;
+      try {
+        final venueResponse = await SupaFlow.client
+            .from('venues')
+            .select('venue_name')
+            .eq('id', widget.venueid)
+            .maybeSingle();
+
+        venueName = venueResponse?['venue_name'] as String?;
+      } catch (e) {
+        print('Error fetching venue name: $e');
+      }
+
+      // Combine game data with creator and venue info
+      return gamesList.map((json) {
+        final creatorId = json['created_by'] as String?;
+
+        // Get creator data (format as expected by Game.fromJson)
+        Map<String, dynamic>? creatorData;
+        if (creatorId != null && creatorsMap.containsKey(creatorId)) {
+          creatorData = {
+            'first_name': creatorsMap[creatorId]!['first_name'],
+            'profile_picture': creatorsMap[creatorId]!['profile_picture'],
+          };
+        }
+
+        return {
+          ...json,
+          'creator': creatorData, // Nested object format expected by Game.fromJson
+          'venue_name': venueName, // Add venue name
+        };
+      }).toList();
     } catch (e) {
       print('Error fetching venue games: $e');
       return [];

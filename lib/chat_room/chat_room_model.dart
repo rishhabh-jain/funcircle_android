@@ -17,6 +17,7 @@ class ChatRoomModel extends FlutterFlowModel<ChatRoomWidget> {
   bool isLoadingRoom = true;
   bool isLoadingMessages = true;
   bool isSendingMessage = false;
+  String? otherUserId; // For single chats, store the other user's ID
   String? otherUserName; // For single chats, store the other user's name
   String? otherUserProfilePicture; // For single chats, store the other user's profile picture
 

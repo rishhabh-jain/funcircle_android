@@ -317,4 +317,24 @@ class NotificationService {
       },
     );
   }
+
+  /// Notify user about new message in personal chat
+  static Future<void> notifyNewMessageInPersonalChat({
+    required String recipientId,
+    required String senderId,
+    required String senderName,
+    required String chatRoomId,
+    required String messagePreview,
+  }) async {
+    await createNotification(
+      userId: recipientId,
+      type: NotificationType.newMessageInPersonalChat,
+      title: senderName,
+      message: messagePreview,
+      data: {
+        'chat_room_id': chatRoomId,
+        'sender_id': senderId,
+      },
+    );
+  }
 }

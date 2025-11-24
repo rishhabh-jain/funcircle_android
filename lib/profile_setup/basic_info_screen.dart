@@ -3,6 +3,8 @@ import 'dart:ui';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/profile_setup/sports_selection_screen.dart';
+import '/auth/firebase_auth/auth_util.dart';
+import '/backend/supabase/supabase.dart';
 
 class BasicInfoScreen extends StatefulWidget {
   const BasicInfoScreen({super.key});
@@ -19,6 +21,57 @@ class _BasicInfoScreenState extends State<BasicInfoScreen> {
   final _nameController = TextEditingController();
   final _referralCodeController = TextEditingController();
   String? _selectedGender;
+  bool _isLoadingName = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadExistingName();
+  }
+
+  /// Load existing name from Supabase or Firebase (for Apple/Google Sign In)
+  Future<void> _loadExistingName() async {
+    try {
+      final userId = currentUserUid;
+      if (userId.isEmpty) {
+        setState(() => _isLoadingName = false);
+        return;
+      }
+
+      // First try to get name from Supabase
+      final userProfile = await SupaFlow.client
+          .from('users')
+          .select('first_name')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+      if (userProfile != null && userProfile['first_name'] != null) {
+        final firstName = userProfile['first_name'] as String;
+        if (firstName.isNotEmpty) {
+          _nameController.text = firstName;
+          print('DEBUG: Pre-filled name from Supabase: $firstName');
+        }
+      } else {
+        // Fallback to Firebase displayName (set by Apple/Google Sign In)
+        final displayName = currentUserDisplayName;
+        if (displayName.isNotEmpty) {
+          _nameController.text = displayName;
+          print('DEBUG: Pre-filled name from Firebase: $displayName');
+        }
+      }
+    } catch (e) {
+      print('DEBUG: Error loading existing name: $e');
+      // Fallback to Firebase displayName
+      final displayName = currentUserDisplayName;
+      if (displayName.isNotEmpty) {
+        _nameController.text = displayName;
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingName = false);
+      }
+    }
+  }
 
   @override
   void dispose() {

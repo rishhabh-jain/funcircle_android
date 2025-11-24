@@ -8,6 +8,7 @@ enum NotificationType {
   gameStartingSoon('game_starting_soon'),
   gameCancelled('game_cancelled'),
   newMessageInGameChat('new_message_in_game_chat'),
+  newMessageInPersonalChat('new_message_in_personal_chat'),
   referralRewardEarned('referral_reward_earned'),
   offerActivated('offer_activated');
 
@@ -63,6 +64,8 @@ class AppNotification {
         return '🚫';
       case NotificationType.newMessageInGameChat:
         return '💬';
+      case NotificationType.newMessageInPersonalChat:
+        return '💬';
       case NotificationType.referralRewardEarned:
         return '🎁';
       case NotificationType.offerActivated:
@@ -83,6 +86,8 @@ class AppNotification {
       case NotificationType.joinRequestApproved:
         return 'Open Chat';
       case NotificationType.newMessageInGameChat:
+        return 'Open Chat';
+      case NotificationType.newMessageInPersonalChat:
         return 'Open Chat';
       case NotificationType.referralRewardEarned:
         return 'View Reward';

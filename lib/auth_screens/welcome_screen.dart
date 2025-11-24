@@ -371,6 +371,51 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                                 }
                               }
 
+                              // Get the display name from Firebase (set by Google Sign In)
+                              final googleDisplayName = user.displayName;
+                              final googleEmail = user.email;
+
+                              print('DEBUG: Google provided name: $googleDisplayName');
+                              print('DEBUG: Google provided email: $googleEmail');
+
+                              // Save Google-provided data to Supabase immediately
+                              if (googleDisplayName != null && googleDisplayName.isNotEmpty) {
+                                try {
+                                  // Check if user exists in Supabase
+                                  final existingProfile = await SupaFlow.client
+                                      .from('users')
+                                      .select('user_id, first_name')
+                                      .eq('user_id', user.uid!)
+                                      .maybeSingle();
+
+                                  if (existingProfile == null) {
+                                    // Create new user with Google-provided data
+                                    await SupaFlow.client.from('users').insert({
+                                      'user_id': user.uid!,
+                                      'first_name': googleDisplayName,
+                                      'email': googleEmail,
+                                      'created': DateTime.now().toIso8601String(),
+                                      'isOnline': true,
+                                      'lastactive': DateTime.now().toIso8601String(),
+                                    });
+                                    print('DEBUG: Created new Supabase user with Google name');
+                                  } else if (existingProfile['first_name'] == null ||
+                                             (existingProfile['first_name'] as String).isEmpty) {
+                                    // Update existing user with Google-provided name
+                                    await SupaFlow.client
+                                        .from('users')
+                                        .update({
+                                          'first_name': googleDisplayName,
+                                          'email': googleEmail,
+                                        })
+                                        .eq('user_id', user.uid!);
+                                    print('DEBUG: Updated Supabase user with Google name');
+                                  }
+                                } catch (e) {
+                                  print('DEBUG: Error saving Google data to Supabase: $e');
+                                }
+                              }
+
                               // Check if profile needs completion
                               final service =
                                   ProfileCompletionService(SupaFlow.client);
@@ -549,6 +594,52 @@ class _WelcomeScreenState extends State<WelcomeScreen>
                                   }
 
                                   print('DEBUG: User authenticated, checking profile completion...');
+
+                                  // Get the display name from Firebase (set by Apple Sign In)
+                                  final appleDisplayName = user.displayName;
+                                  final appleEmail = user.email;
+
+                                  print('DEBUG: Apple provided name: $appleDisplayName');
+                                  print('DEBUG: Apple provided email: $appleEmail');
+
+                                  // Save Apple-provided data to Supabase immediately
+                                  if (appleDisplayName != null && appleDisplayName.isNotEmpty) {
+                                    try {
+                                      // Check if user exists in Supabase
+                                      final existingProfile = await SupaFlow.client
+                                          .from('users')
+                                          .select('user_id, first_name')
+                                          .eq('user_id', user.uid!)
+                                          .maybeSingle();
+
+                                      if (existingProfile == null) {
+                                        // Create new user with Apple-provided data
+                                        await SupaFlow.client.from('users').insert({
+                                          'user_id': user.uid!,
+                                          'first_name': appleDisplayName,
+                                          'email': appleEmail,
+                                          'created': DateTime.now().toIso8601String(),
+                                          'isOnline': true,
+                                          'lastactive': DateTime.now().toIso8601String(),
+                                        });
+                                        print('DEBUG: Created new Supabase user with Apple name');
+                                      } else if (existingProfile['first_name'] == null ||
+                                                 (existingProfile['first_name'] as String).isEmpty) {
+                                        // Update existing user with Apple-provided name
+                                        await SupaFlow.client
+                                            .from('users')
+                                            .update({
+                                              'first_name': appleDisplayName,
+                                              'email': appleEmail,
+                                            })
+                                            .eq('user_id', user.uid!);
+                                        print('DEBUG: Updated Supabase user with Apple name');
+                                      }
+                                    } catch (e) {
+                                      print('DEBUG: Error saving Apple data to Supabase: $e');
+                                    }
+                                  }
+
                                   final service = ProfileCompletionService(SupaFlow.client);
                                   final needsCompletion = await service.needsProfileCompletion(user.uid!);
 

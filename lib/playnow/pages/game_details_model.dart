@@ -8,6 +8,7 @@ class GameDetailsModel extends FlutterFlowModel {
   List<GameParticipant> participants = [];
   bool isLoading = false;
   bool isJoining = false;
+  bool isCreatingChat = false;
 
   // Additional loaded data
   String? organizerName;

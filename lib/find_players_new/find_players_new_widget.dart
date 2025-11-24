@@ -139,6 +139,10 @@ class _FindPlayersNewWidgetState extends State<FindPlayersNewWidget> {
                 myLocationEnabled: true,
                 myLocationButtonEnabled: false,
                 zoomControlsEnabled: false,
+                zoomGesturesEnabled: true,
+                scrollGesturesEnabled: true,
+                rotateGesturesEnabled: true,
+                tiltGesturesEnabled: true,
                 mapType: gmaps.MapType.normal,
               ),
 

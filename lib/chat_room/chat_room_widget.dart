@@ -1,9 +1,11 @@
 import '/auth/firebase_auth/auth_util.dart';
-
+import '/backend/backend.dart';
+import '/backend/push_notifications/push_notifications_util.dart';
 import '/backend/supabase/supabase.dart';
 import '/flutter_flow/flutter_flow_icon_button.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
+import '/playnow/services/notification_service.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:timeago/timeago.dart' as timeago;
@@ -91,6 +93,7 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                 .maybeSingle();
 
             if (userResponse != null) {
+              _model.otherUserId = otherUserId;
               _model.otherUserName = userResponse['first_name'];
               _model.otherUserProfilePicture = userResponse['profile_picture'];
             }
@@ -165,7 +168,8 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
       }
 
       safeSetState(() {
-        _model.messages = messages.map((data) => ChatMessagesRow(data)).toList();
+        _model.messages =
+            messages.map((data) => ChatMessagesRow(data)).toList();
         _model.isLoadingMessages = false;
       });
 
@@ -303,6 +307,51 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
         safeSetState(() {
           _model.messages.add(newMessage);
         });
+
+        // Send notification for personal chats
+        if (_model.chatRoom?.type == 'single' && _model.otherUserId != null) {
+          try {
+            // Get current user's name
+            final currentUserResponse = await SupaFlow.client
+                .from('users')
+                .select('first_name')
+                .eq('user_id', currentUserUid)
+                .maybeSingle();
+
+            final senderName = currentUserResponse?['first_name'] ?? 'Someone';
+
+            // Truncate message preview to 50 characters
+            final messagePreview = messageText.length > 50
+                ? '${messageText.substring(0, 50)}...'
+                : messageText;
+
+            // Create in-app notification
+            await NotificationService.notifyNewMessageInPersonalChat(
+              recipientId: _model.otherUserId!,
+              senderId: currentUserUid,
+              senderName: senderName,
+              chatRoomId: widget.roomId!,
+              messagePreview: messagePreview,
+            );
+
+            // Send push notification via Firebase
+            final recipientRef = UsersRecord.collection.doc(_model.otherUserId);
+            triggerPushNotification(
+              notificationTitle: senderName,
+              notificationText: messagePreview,
+              userRefs: [recipientRef],
+              initialPageName: 'ChatRoom',
+              parameterData: {
+                'roomId': widget.roomId!,
+              },
+            );
+
+            print('✅ Notification sent to ${_model.otherUserName}');
+          } catch (e) {
+            print('⚠️ Error sending notification: $e');
+            // Don't fail the message send if notification fails
+          }
+        }
 
         // Clear input
         _model.messageController?.clear();
@@ -476,8 +525,9 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                                     fontSize: 17.0,
                                     letterSpacing: 0.0,
                                     fontWeight: FontWeight.w600,
-                                    useGoogleFonts: !FlutterFlowTheme.of(context)
-                                        .headlineMediumIsCustom,
+                                    useGoogleFonts:
+                                        !FlutterFlowTheme.of(context)
+                                            .headlineMediumIsCustom,
                                   ),
                             ),
                             if (_model.chatRoom?.sportType != null)
@@ -491,8 +541,9 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                                       color: Color(0xFFAAAAAA),
                                       fontSize: 12.0,
                                       letterSpacing: 0.0,
-                                      useGoogleFonts: !FlutterFlowTheme.of(context)
-                                          .bodySmallIsCustom,
+                                      useGoogleFonts:
+                                          !FlutterFlowTheme.of(context)
+                                              .bodySmallIsCustom,
                                     ),
                               ),
                           ],
@@ -540,8 +591,9 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                                         color: Color(0xFF8E8E93),
                                         fontSize: 16.0,
                                         letterSpacing: 0.0,
-                                        useGoogleFonts: !FlutterFlowTheme.of(context)
-                                            .bodyMediumIsCustom,
+                                        useGoogleFonts:
+                                            !FlutterFlowTheme.of(context)
+                                                .bodyMediumIsCustom,
                                       ),
                                 ),
                                 SizedBox(height: 8.0),
@@ -555,8 +607,9 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                                         color: Color(0xFF636366),
                                         fontSize: 14.0,
                                         letterSpacing: 0.0,
-                                        useGoogleFonts: !FlutterFlowTheme.of(context)
-                                            .bodySmallIsCustom,
+                                        useGoogleFonts:
+                                            !FlutterFlowTheme.of(context)
+                                                .bodySmallIsCustom,
                                       ),
                                 ),
                               ],
@@ -624,16 +677,21 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                                       Padding(
                                         padding: EdgeInsetsDirectional.fromSTEB(
                                             0.0, 0.0, 8.0, 0.0),
-                                        child: message.senderProfilePicture != null &&
-                                               message.senderProfilePicture!.isNotEmpty
+                                        child: message.senderProfilePicture !=
+                                                    null &&
+                                                message.senderProfilePicture!
+                                                    .isNotEmpty
                                             ? ClipRRect(
-                                                borderRadius: BorderRadius.circular(16.0),
+                                                borderRadius:
+                                                    BorderRadius.circular(16.0),
                                                 child: CachedNetworkImage(
-                                                  imageUrl: message.senderProfilePicture!,
+                                                  imageUrl: message
+                                                      .senderProfilePicture!,
                                                   width: 32.0,
                                                   height: 32.0,
                                                   fit: BoxFit.cover,
-                                                  placeholder: (context, url) => Container(
+                                                  placeholder: (context, url) =>
+                                                      Container(
                                                     width: 32.0,
                                                     height: 32.0,
                                                     decoration: BoxDecoration(
@@ -642,30 +700,45 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                                                           Color(0xFF00C9FF),
                                                           Color(0xFF0084FF),
                                                         ],
-                                                        begin: Alignment.topLeft,
-                                                        end: Alignment.bottomRight,
+                                                        begin:
+                                                            Alignment.topLeft,
+                                                        end: Alignment
+                                                            .bottomRight,
                                                       ),
                                                       shape: BoxShape.circle,
                                                     ),
                                                     child: Center(
                                                       child: Text(
-                                                        (message.senderName ?? 'U')[0].toUpperCase(),
-                                                        style: FlutterFlowTheme.of(context)
+                                                        (message.senderName ??
+                                                                'U')[0]
+                                                            .toUpperCase(),
+                                                        style: FlutterFlowTheme
+                                                                .of(context)
                                                             .bodyMedium
                                                             .override(
-                                                              fontFamily: FlutterFlowTheme.of(context)
-                                                                  .bodyMediumFamily,
-                                                              color: Colors.white,
+                                                              fontFamily:
+                                                                  FlutterFlowTheme.of(
+                                                                          context)
+                                                                      .bodyMediumFamily,
+                                                              color:
+                                                                  Colors.white,
                                                               fontSize: 14.0,
-                                                              fontWeight: FontWeight.w600,
-                                                              letterSpacing: 0.0,
-                                                              useGoogleFonts: !FlutterFlowTheme.of(context)
-                                                                  .bodyMediumIsCustom,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w600,
+                                                              letterSpacing:
+                                                                  0.0,
+                                                              useGoogleFonts:
+                                                                  !FlutterFlowTheme.of(
+                                                                          context)
+                                                                      .bodyMediumIsCustom,
                                                             ),
                                                       ),
                                                     ),
                                                   ),
-                                                  errorWidget: (context, url, error) => Container(
+                                                  errorWidget:
+                                                      (context, url, error) =>
+                                                          Container(
                                                     width: 32.0,
                                                     height: 32.0,
                                                     decoration: BoxDecoration(
@@ -674,25 +747,38 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                                                           Color(0xFF00C9FF),
                                                           Color(0xFF0084FF),
                                                         ],
-                                                        begin: Alignment.topLeft,
-                                                        end: Alignment.bottomRight,
+                                                        begin:
+                                                            Alignment.topLeft,
+                                                        end: Alignment
+                                                            .bottomRight,
                                                       ),
                                                       shape: BoxShape.circle,
                                                     ),
                                                     child: Center(
                                                       child: Text(
-                                                        (message.senderName ?? 'U')[0].toUpperCase(),
-                                                        style: FlutterFlowTheme.of(context)
+                                                        (message.senderName ??
+                                                                'U')[0]
+                                                            .toUpperCase(),
+                                                        style: FlutterFlowTheme
+                                                                .of(context)
                                                             .bodyMedium
                                                             .override(
-                                                              fontFamily: FlutterFlowTheme.of(context)
-                                                                  .bodyMediumFamily,
-                                                              color: Colors.white,
+                                                              fontFamily:
+                                                                  FlutterFlowTheme.of(
+                                                                          context)
+                                                                      .bodyMediumFamily,
+                                                              color:
+                                                                  Colors.white,
                                                               fontSize: 14.0,
-                                                              fontWeight: FontWeight.w600,
-                                                              letterSpacing: 0.0,
-                                                              useGoogleFonts: !FlutterFlowTheme.of(context)
-                                                                  .bodyMediumIsCustom,
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w600,
+                                                              letterSpacing:
+                                                                  0.0,
+                                                              useGoogleFonts:
+                                                                  !FlutterFlowTheme.of(
+                                                                          context)
+                                                                      .bodyMediumIsCustom,
                                                             ),
                                                       ),
                                                     ),
@@ -715,18 +801,26 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                                                 ),
                                                 child: Center(
                                                   child: Text(
-                                                    (message.senderName ?? 'U')[0].toUpperCase(),
-                                                    style: FlutterFlowTheme.of(context)
+                                                    (message.senderName ??
+                                                            'U')[0]
+                                                        .toUpperCase(),
+                                                    style: FlutterFlowTheme.of(
+                                                            context)
                                                         .bodyMedium
                                                         .override(
-                                                          fontFamily: FlutterFlowTheme.of(context)
-                                                              .bodyMediumFamily,
+                                                          fontFamily:
+                                                              FlutterFlowTheme.of(
+                                                                      context)
+                                                                  .bodyMediumFamily,
                                                           color: Colors.white,
                                                           fontSize: 14.0,
-                                                          fontWeight: FontWeight.w600,
+                                                          fontWeight:
+                                                              FontWeight.w600,
                                                           letterSpacing: 0.0,
-                                                          useGoogleFonts: !FlutterFlowTheme.of(context)
-                                                              .bodyMediumIsCustom,
+                                                          useGoogleFonts:
+                                                              !FlutterFlowTheme
+                                                                      .of(context)
+                                                                  .bodyMediumIsCustom,
                                                         ),
                                                   ),
                                                 ),
@@ -740,23 +834,30 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                                             : CrossAxisAlignment.start,
                                         children: [
                                           // Sender name (only for other users)
-                                          if (!isMe && message.senderName != null)
+                                          if (!isMe &&
+                                              message.senderName != null)
                                             Padding(
                                               padding: EdgeInsetsDirectional
-                                                  .fromSTEB(12.0, 0.0, 0.0, 2.0),
+                                                  .fromSTEB(
+                                                      12.0, 0.0, 0.0, 2.0),
                                               child: Text(
                                                 message.senderName!,
-                                                style: FlutterFlowTheme.of(context)
+                                                style: FlutterFlowTheme.of(
+                                                        context)
                                                     .bodySmall
                                                     .override(
                                                       fontFamily:
                                                           FlutterFlowTheme.of(
                                                                   context)
                                                               .bodySmallFamily,
-                                                      color: FlutterFlowTheme.of(context).primary,
+                                                      color:
+                                                          FlutterFlowTheme.of(
+                                                                  context)
+                                                              .primary,
                                                       fontSize: 12.0,
                                                       letterSpacing: 0.0,
-                                                      fontWeight: FontWeight.w500,
+                                                      fontWeight:
+                                                          FontWeight.w500,
                                                       useGoogleFonts:
                                                           !FlutterFlowTheme.of(
                                                                   context)
@@ -766,181 +867,270 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                                             ),
                                           // Message bubble
                                           GestureDetector(
-                                            onLongPress: !isMe ? () {
-                                              // Show report dialog for other users' messages
-                                              showDialog(
-                                                context: context,
-                                                builder: (dialogContext) => AlertDialog(
-                                                  backgroundColor: FlutterFlowTheme.of(context).secondaryBackground,
-                                                  title: Text(
-                                                    'Report Message',
-                                                    style: FlutterFlowTheme.of(context).headlineSmall.override(
-                                                      fontFamily: FlutterFlowTheme.of(context).headlineSmallFamily,
-                                                      color: FlutterFlowTheme.of(context).tertiary,
-                                                      letterSpacing: 0.0,
-                                                      useGoogleFonts: !FlutterFlowTheme.of(context).headlineSmallIsCustom,
-                                                    ),
-                                                  ),
-                                                  content: Text(
-                                                    'Report this message as inappropriate?',
-                                                    style: FlutterFlowTheme.of(context).bodyMedium.override(
-                                                      fontFamily: FlutterFlowTheme.of(context).bodyMediumFamily,
-                                                      color: FlutterFlowTheme.of(context).secondaryText,
-                                                      letterSpacing: 0.0,
-                                                      useGoogleFonts: !FlutterFlowTheme.of(context).bodyMediumIsCustom,
-                                                    ),
-                                                  ),
-                                                  actions: [
-                                                    TextButton(
-                                                      onPressed: () => Navigator.pop(dialogContext),
-                                                      child: Text(
-                                                        'Cancel',
-                                                        style: TextStyle(color: FlutterFlowTheme.of(context).secondaryText),
-                                                      ),
-                                                    ),
-                                                    TextButton(
-                                                      onPressed: () async {
-                                                        try {
-                                                          // Add report to database (chat schema)
-                                                          await SupaFlow.client
-                                                              .schema('chat')
-                                                              .from('message_reports')
-                                                              .insert({
-                                                            'message_id': message.id,
-                                                            'room_id': widget.roomId,
-                                                            'reporter_id': currentUserUid,
-                                                            'reported_user_id': message.senderId,
-                                                            'created_at': DateTime.now().toIso8601String(),
-                                                          });
-
-                                                          Navigator.pop(dialogContext);
-
-                                                          ScaffoldMessenger.of(context).showSnackBar(
-                                                            SnackBar(
-                                                              content: Text('Message reported successfully'),
-                                                              backgroundColor: FlutterFlowTheme.of(context).success,
+                                            onLongPress: !isMe
+                                                ? () {
+                                                    // Show report dialog for other users' messages
+                                                    showDialog(
+                                                      context: context,
+                                                      builder:
+                                                          (dialogContext) =>
+                                                              AlertDialog(
+                                                        backgroundColor:
+                                                            FlutterFlowTheme.of(
+                                                                    context)
+                                                                .secondaryBackground,
+                                                        title: Text(
+                                                          'Report Message',
+                                                          style: FlutterFlowTheme
+                                                                  .of(context)
+                                                              .headlineSmall
+                                                              .override(
+                                                                fontFamily: FlutterFlowTheme.of(
+                                                                        context)
+                                                                    .headlineSmallFamily,
+                                                                color: FlutterFlowTheme.of(
+                                                                        context)
+                                                                    .tertiary,
+                                                                letterSpacing:
+                                                                    0.0,
+                                                                useGoogleFonts:
+                                                                    !FlutterFlowTheme.of(
+                                                                            context)
+                                                                        .headlineSmallIsCustom,
+                                                              ),
+                                                        ),
+                                                        content: Text(
+                                                          'Report this message as inappropriate?',
+                                                          style: FlutterFlowTheme
+                                                                  .of(context)
+                                                              .bodyMedium
+                                                              .override(
+                                                                fontFamily: FlutterFlowTheme.of(
+                                                                        context)
+                                                                    .bodyMediumFamily,
+                                                                color: FlutterFlowTheme.of(
+                                                                        context)
+                                                                    .secondaryText,
+                                                                letterSpacing:
+                                                                    0.0,
+                                                                useGoogleFonts:
+                                                                    !FlutterFlowTheme.of(
+                                                                            context)
+                                                                        .bodyMediumIsCustom,
+                                                              ),
+                                                        ),
+                                                        actions: [
+                                                          TextButton(
+                                                            onPressed: () =>
+                                                                Navigator.pop(
+                                                                    dialogContext),
+                                                            child: Text(
+                                                              'Cancel',
+                                                              style: TextStyle(
+                                                                  color: FlutterFlowTheme.of(
+                                                                          context)
+                                                                      .secondaryText),
                                                             ),
-                                                          );
-                                                        } catch (e) {
-                                                          print('Error reporting message: $e');
-                                                          Navigator.pop(dialogContext);
+                                                          ),
+                                                          TextButton(
+                                                            onPressed:
+                                                                () async {
+                                                              try {
+                                                                // Add report to database (chat schema)
+                                                                await SupaFlow
+                                                                    .client
+                                                                    .schema(
+                                                                        'chat')
+                                                                    .from(
+                                                                        'message_reports')
+                                                                    .insert({
+                                                                  'message_id':
+                                                                      message
+                                                                          .id,
+                                                                  'room_id':
+                                                                      widget
+                                                                          .roomId,
+                                                                  'reporter_id':
+                                                                      currentUserUid,
+                                                                  'reported_user_id':
+                                                                      message
+                                                                          .senderId,
+                                                                  'created_at':
+                                                                      DateTime.now()
+                                                                          .toIso8601String(),
+                                                                });
 
-                                                          ScaffoldMessenger.of(context).showSnackBar(
-                                                            SnackBar(
-                                                              content: Text('Failed to report message'),
-                                                              backgroundColor: FlutterFlowTheme.of(context).error,
+                                                                Navigator.pop(
+                                                                    dialogContext);
+
+                                                                ScaffoldMessenger.of(
+                                                                        context)
+                                                                    .showSnackBar(
+                                                                  SnackBar(
+                                                                    content: Text(
+                                                                        'Message reported successfully'),
+                                                                    backgroundColor:
+                                                                        FlutterFlowTheme.of(context)
+                                                                            .success,
+                                                                  ),
+                                                                );
+                                                              } catch (e) {
+                                                                print(
+                                                                    'Error reporting message: $e');
+                                                                Navigator.pop(
+                                                                    dialogContext);
+
+                                                                ScaffoldMessenger.of(
+                                                                        context)
+                                                                    .showSnackBar(
+                                                                  SnackBar(
+                                                                    content: Text(
+                                                                        'Failed to report message'),
+                                                                    backgroundColor:
+                                                                        FlutterFlowTheme.of(context)
+                                                                            .error,
+                                                                  ),
+                                                                );
+                                                              }
+                                                            },
+                                                            child: Text(
+                                                              'Report',
+                                                              style: TextStyle(
+                                                                  color: FlutterFlowTheme.of(
+                                                                          context)
+                                                                      .error),
                                                             ),
-                                                          );
-                                                        }
-                                                      },
-                                                      child: Text(
-                                                        'Report',
-                                                        style: TextStyle(color: FlutterFlowTheme.of(context).error),
+                                                          ),
+                                                        ],
                                                       ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              );
-                                            } : null,
+                                                    );
+                                                  }
+                                                : null,
                                             child: Container(
                                               constraints: BoxConstraints(
-                                                maxWidth: MediaQuery.sizeOf(context)
-                                                        .width *
-                                                    0.7,
+                                                maxWidth:
+                                                    MediaQuery.sizeOf(context)
+                                                            .width *
+                                                        0.7,
                                               ),
                                               decoration: BoxDecoration(
-                                              gradient: isMe
-                                                  ? LinearGradient(
-                                                      colors: [
-                                                        FlutterFlowTheme.of(context).primary,
-                                                        FlutterFlowTheme.of(context).secondary,
-                                                      ],
-                                                      begin: Alignment.topLeft,
-                                                      end: Alignment.bottomRight,
-                                                    )
-                                                  : null,
-                                              color: isMe ? null : Color(0xFF1C1C1E),
-                                              borderRadius: BorderRadius.only(
-                                                topLeft: Radius.circular(20.0),
-                                                topRight: Radius.circular(20.0),
-                                                bottomLeft: Radius.circular(
-                                                    isMe ? 20.0 : 4.0),
-                                                bottomRight: Radius.circular(
-                                                    isMe ? 4.0 : 20.0),
-                                              ),
-                                              boxShadow: [
-                                                BoxShadow(
-                                                  color: Colors.black.withValues(alpha: 0.15),
-                                                  blurRadius: 8.0,
-                                                  offset: Offset(0, 2),
+                                                gradient: isMe
+                                                    ? LinearGradient(
+                                                        colors: [
+                                                          FlutterFlowTheme.of(
+                                                                  context)
+                                                              .primary,
+                                                          FlutterFlowTheme.of(
+                                                                  context)
+                                                              .secondary,
+                                                        ],
+                                                        begin:
+                                                            Alignment.topLeft,
+                                                        end: Alignment
+                                                            .bottomRight,
+                                                      )
+                                                    : null,
+                                                color: isMe
+                                                    ? null
+                                                    : Color(0xFF1C1C1E),
+                                                borderRadius: BorderRadius.only(
+                                                  topLeft:
+                                                      Radius.circular(20.0),
+                                                  topRight:
+                                                      Radius.circular(20.0),
+                                                  bottomLeft: Radius.circular(
+                                                      isMe ? 20.0 : 4.0),
+                                                  bottomRight: Radius.circular(
+                                                      isMe ? 4.0 : 20.0),
                                                 ),
-                                              ],
-                                            ),
-                                            child: Padding(
-                                              padding: EdgeInsets.symmetric(
-                                                  horizontal: 14.0, vertical: 10.0),
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Text(
-                                                    message.content ?? '',
-                                                    style: FlutterFlowTheme.of(
-                                                            context)
-                                                        .bodyMedium
-                                                        .override(
-                                                          fontFamily:
-                                                              FlutterFlowTheme.of(
-                                                                      context)
-                                                                  .bodyMediumFamily,
-                                                          color: Colors.white,
-                                                          fontSize: 15.0,
-                                                          letterSpacing: 0.0,
-                                                          useGoogleFonts: !FlutterFlowTheme
-                                                                  .of(context)
-                                                              .bodyMediumIsCustom,
-                                                        ),
-                                                  ),
-                                                  SizedBox(height: 4.0),
-                                                  Row(
-                                                    mainAxisSize: MainAxisSize.min,
-                                                    children: [
-                                                      Text(
-                                                        message.createdAt != null
-                                                            ? timeago.format(
-                                                                message.createdAt!)
-                                                            : '',
-                                                        style: FlutterFlowTheme.of(
-                                                                context)
-                                                            .bodySmall
-                                                            .override(
-                                                              fontFamily:
-                                                                  FlutterFlowTheme.of(
-                                                                          context)
-                                                                      .bodySmallFamily,
-                                                              color: Colors.white
-                                                                  .withValues(alpha: 0.6),
-                                                              fontSize: 11.0,
-                                                              letterSpacing: 0.0,
-                                                              useGoogleFonts: !FlutterFlowTheme
-                                                                      .of(context)
-                                                                  .bodySmallIsCustom,
-                                                            ),
-                                                      ),
-                                                      if (isMe) ...[
-                                                        SizedBox(width: 4.0),
-                                                        Icon(
-                                                          Icons.done_all_rounded,
-                                                          color: Colors.white.withValues(alpha: 0.6),
-                                                          size: 14.0,
-                                                        ),
-                                                      ],
-                                                    ],
+                                                boxShadow: [
+                                                  BoxShadow(
+                                                    color: Colors.black
+                                                        .withValues(
+                                                            alpha: 0.15),
+                                                    blurRadius: 8.0,
+                                                    offset: Offset(0, 2),
                                                   ),
                                                 ],
                                               ),
-                                            ),
+                                              child: Padding(
+                                                padding: EdgeInsets.symmetric(
+                                                    horizontal: 14.0,
+                                                    vertical: 10.0),
+                                                child: Column(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  mainAxisSize:
+                                                      MainAxisSize.min,
+                                                  children: [
+                                                    Text(
+                                                      message.content ?? '',
+                                                      style: FlutterFlowTheme
+                                                              .of(context)
+                                                          .bodyMedium
+                                                          .override(
+                                                            fontFamily:
+                                                                FlutterFlowTheme.of(
+                                                                        context)
+                                                                    .bodyMediumFamily,
+                                                            color: Colors.white,
+                                                            fontSize: 15.0,
+                                                            letterSpacing: 0.0,
+                                                            useGoogleFonts:
+                                                                !FlutterFlowTheme.of(
+                                                                        context)
+                                                                    .bodyMediumIsCustom,
+                                                          ),
+                                                    ),
+                                                    SizedBox(height: 4.0),
+                                                    Row(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      children: [
+                                                        Text(
+                                                          message.createdAt !=
+                                                                  null
+                                                              ? timeago.format(
+                                                                  message
+                                                                      .createdAt!)
+                                                              : '',
+                                                          style: FlutterFlowTheme
+                                                                  .of(context)
+                                                              .bodySmall
+                                                              .override(
+                                                                fontFamily: FlutterFlowTheme.of(
+                                                                        context)
+                                                                    .bodySmallFamily,
+                                                                color: Colors
+                                                                    .white
+                                                                    .withValues(
+                                                                        alpha:
+                                                                            0.6),
+                                                                fontSize: 11.0,
+                                                                letterSpacing:
+                                                                    0.0,
+                                                                useGoogleFonts:
+                                                                    !FlutterFlowTheme.of(
+                                                                            context)
+                                                                        .bodySmallIsCustom,
+                                                              ),
+                                                        ),
+                                                        if (isMe) ...[
+                                                          SizedBox(width: 4.0),
+                                                          Icon(
+                                                            Icons
+                                                                .done_all_rounded,
+                                                            color: Colors.white
+                                                                .withValues(
+                                                                    alpha: 0.6),
+                                                            size: 14.0,
+                                                          ),
+                                                        ],
+                                                      ],
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
                                             ),
                                           ),
                                         ],
@@ -966,7 +1156,8 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                   ],
                 ),
                 child: Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
+                  padding:
+                      EdgeInsets.symmetric(horizontal: 12.0, vertical: 10.0),
                   child: Row(
                     mainAxisSize: MainAxisSize.max,
                     crossAxisAlignment: CrossAxisAlignment.end,
@@ -1007,7 +1198,8 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                               obscureText: false,
                               textInputAction: TextInputAction.send,
                               onFieldSubmitted: (value) async {
-                                if (!_model.isSendingMessage && value.trim().isNotEmpty) {
+                                if (!_model.isSendingMessage &&
+                                    value.trim().isNotEmpty) {
                                   await _sendMessage();
                                 }
                               },
@@ -1022,9 +1214,9 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                                       color: Color(0xFF8E8E93),
                                       fontSize: 15.0,
                                       letterSpacing: 0.0,
-                                      useGoogleFonts: !FlutterFlowTheme.of(
-                                              context)
-                                          .bodyMediumIsCustom,
+                                      useGoogleFonts:
+                                          !FlutterFlowTheme.of(context)
+                                              .bodyMediumIsCustom,
                                     ),
                                 enabledBorder: InputBorder.none,
                                 focusedBorder: InputBorder.none,
@@ -1040,9 +1232,9 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                                     color: Colors.white,
                                     fontSize: 15.0,
                                     letterSpacing: 0.0,
-                                    useGoogleFonts: !FlutterFlowTheme.of(
-                                            context)
-                                        .bodyMediumIsCustom,
+                                    useGoogleFonts:
+                                        !FlutterFlowTheme.of(context)
+                                            .bodyMediumIsCustom,
                                   ),
                               maxLines: 5,
                               minLines: 1,
@@ -1069,7 +1261,9 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                                   begin: Alignment.topLeft,
                                   end: Alignment.bottomRight,
                                 ),
-                          color: _model.isSendingMessage ? Color(0xFF3A3A3C) : null,
+                          color: _model.isSendingMessage
+                              ? Color(0xFF3A3A3C)
+                              : null,
                           shape: BoxShape.circle,
                           boxShadow: _model.isSendingMessage
                               ? []
@@ -1099,7 +1293,8 @@ class _ChatRoomWidgetState extends State<ChatRoomWidget> {
                                       height: 16.0,
                                       child: CircularProgressIndicator(
                                         strokeWidth: 2.0,
-                                        valueColor: AlwaysStoppedAnimation<Color>(
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
                                           Color(0xFF8E8E93),
                                         ),
                                       ),

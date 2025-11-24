@@ -570,34 +570,88 @@ class MapService {
             is_mixed_only,
             description,
             status,
-            created_at
+            created_at,
+            is_official
           ''')
           .eq('sport_type', sportType)
           .inFilter('status', ['open'])
           .gte('game_date', todayString); // Filter out past games
 
-      // Fetch creator details separately for each game
-      final List<Map<String, dynamic>> games = [];
-      for (final json in (response as List)) {
-        final creatorId = json['created_by'] as String?;
-        Map<String, dynamic>? creatorData;
+      // Fetch creator and venue details in batches (optimized)
+      final gamesList = (response as List).cast<Map<String, dynamic>>();
 
-        if (creatorId != null) {
-          try {
-            creatorData = await _client
-                .from('users')
-                .select('first_name, profile_picture')
-                .eq('user_id', creatorId)
-                .maybeSingle();
-          } catch (e) {
-            print('Error fetching creator $creatorId: $e');
+      // Extract unique creator IDs and venue IDs
+      final creatorIds = gamesList
+          .map((g) => g['created_by'] as String?)
+          .where((id) => id != null)
+          .toSet()
+          .toList();
+
+      final venueIds = gamesList
+          .map((g) => g['venue_id'] as int?)
+          .where((id) => id != null)
+          .toSet()
+          .toList();
+
+      // Fetch all creators at once (batch query)
+      Map<String, Map<String, dynamic>> creatorsMap = {};
+      if (creatorIds.isNotEmpty) {
+        try {
+          final creatorsResponse = await _client
+              .from('users')
+              .select('user_id, first_name, profile_picture')
+              .inFilter('user_id', creatorIds);
+
+          for (final creator in (creatorsResponse as List)) {
+            creatorsMap[creator['user_id'] as String] = creator;
           }
+        } catch (e) {
+          print('Error fetching creators in batch: $e');
+        }
+      }
+
+      // Fetch all venues at once (batch query)
+      Map<int, Map<String, dynamic>> venuesMap = {};
+      if (venueIds.isNotEmpty) {
+        try {
+          final venuesResponse = await _client
+              .from('venues')
+              .select('id, venue_name')
+              .inFilter('id', venueIds);
+
+          for (final venue in (venuesResponse as List)) {
+            venuesMap[venue['id'] as int] = venue;
+          }
+        } catch (e) {
+          print('Error fetching venues in batch: $e');
+        }
+      }
+
+      // Combine game data with creator and venue info
+      final List<Map<String, dynamic>> games = [];
+      for (final json in gamesList) {
+        final creatorId = json['created_by'] as String?;
+        final venueId = json['venue_id'] as int?;
+
+        // Get creator data (format as expected by Game.fromJson)
+        Map<String, dynamic>? creatorData;
+        if (creatorId != null && creatorsMap.containsKey(creatorId)) {
+          creatorData = {
+            'first_name': creatorsMap[creatorId]!['first_name'],
+            'profile_picture': creatorsMap[creatorId]!['profile_picture'],
+          };
+        }
+
+        // Get venue name
+        String? venueName;
+        if (venueId != null && venuesMap.containsKey(venueId)) {
+          venueName = venuesMap[venueId]!['venue_name'] as String?;
         }
 
         games.add({
           ...json,
-          'creator_name': creatorData?['first_name'],
-          'creator_profile_picture': creatorData?['profile_picture'],
+          'creator': creatorData, // Nested object format expected by Game.fromJson
+          'venue_name': venueName, // Add venue name
         });
       }
 
@@ -832,14 +886,16 @@ class MapService {
     try {
       // Check if a chat room already exists between these two users
       final existingRooms = await _client
-          .from('chat.rooms')
-          .select('id, room_members!inner(user_id)')
+          .schema('chat')
+          .from('rooms')
+          .select('id')
           .eq('type', 'single');
 
       // Find room where both users are members
       for (final room in existingRooms as List) {
         final members = await _client
-            .from('chat.room_members')
+            .schema('chat')
+            .from('room_members')
             .select('user_id')
             .eq('room_id', room['id']);
 
@@ -852,7 +908,8 @@ class MapService {
 
       // Create new chat room if none exists
       final roomResponse = await _client
-          .from('chat.rooms')
+          .schema('chat')
+          .from('rooms')
           .insert({
             'type': 'single',
             'is_active': true,
@@ -864,7 +921,7 @@ class MapService {
       final roomId = roomResponse['id'] as String;
 
       // Add both users as members
-      await _client.from('chat.room_members').insert([
+      await _client.schema('chat').from('room_members').insert([
         {
           'room_id': roomId,
           'user_id': userId1,

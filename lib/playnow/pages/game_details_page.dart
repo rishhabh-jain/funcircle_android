@@ -7,6 +7,7 @@ import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/auth/firebase_auth/auth_util.dart';
 import '/backend/supabase/supabase.dart';
+import '/find_players_new/services/map_service.dart';
 import '../models/game_model.dart';
 import '../services/game_service.dart';
 import '../services/after_game_service.dart';
@@ -32,6 +33,7 @@ class GameDetailsPage extends StatefulWidget {
 
 class _GameDetailsPageState extends State<GameDetailsPage> {
   late GameDetailsModel _model;
+  bool _isSkillInfoExpanded = false;
 
   @override
   void initState() {
@@ -195,7 +197,9 @@ class _GameDetailsPageState extends State<GameDetailsPage> {
     final game = _model.game;
     if (game == null) return 88;
 
-    final hasJoined = _model.participants.any((p) => p.userId == currentUserUid);
+    final hasJoined =
+        _model.participants.any((p) => p.userId == currentUserUid);
+    final isCreator = game.createdBy == currentUserUid;
 
     // Calculate based on what buttons will be shown
     double height = 72; // Base height for one button
@@ -393,7 +397,8 @@ class _GameDetailsPageState extends State<GameDetailsPage> {
   Widget _buildUnifiedGameBlock() {
     final game = _model.game!;
     final isCreator = game.createdBy == currentUserUid;
-    final hasJoined = _model.participants.any((p) => p.userId == currentUserUid);
+    final hasJoined =
+        _model.participants.any((p) => p.userId == currentUserUid);
 
     return Container(
       width: double.infinity,
@@ -420,7 +425,8 @@ class _GameDetailsPageState extends State<GameDetailsPage> {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: _getSportColor().withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
@@ -435,7 +441,9 @@ class _GameDetailsPageState extends State<GameDetailsPage> {
                     Icon(_getSportIcon(), color: _getSportColor(), size: 14),
                     const SizedBox(width: 5),
                     Text(
-                      game.sportType == 'badminton' ? 'Badminton' : 'Pickleball',
+                      game.sportType == 'badminton'
+                          ? 'Badminton'
+                          : 'Pickleball',
                       style: TextStyle(
                         color: _getSportColor(),
                         fontSize: 11,
@@ -448,12 +456,17 @@ class _GameDetailsPageState extends State<GameDetailsPage> {
               if (isCreator) ...[
                 const SizedBox(width: 6),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: FlutterFlowTheme.of(context).primary.withValues(alpha: 0.2),
+                    color: FlutterFlowTheme.of(context)
+                        .primary
+                        .withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: FlutterFlowTheme.of(context).primary.withValues(alpha: 0.4),
+                      color: FlutterFlowTheme.of(context)
+                          .primary
+                          .withValues(alpha: 0.4),
                       width: 1,
                     ),
                   ),
@@ -469,7 +482,9 @@ class _GameDetailsPageState extends State<GameDetailsPage> {
               ],
               const Spacer(),
               // Edit and Cancel buttons for creator
-              if (isCreator && game.status != 'completed' && game.status != 'cancelled') ...[
+              if (isCreator &&
+                  game.status != 'completed' &&
+                  game.status != 'cancelled') ...[
                 // Edit button
                 GestureDetector(
                   onTap: _showEditGameDialog,
@@ -506,7 +521,8 @@ class _GameDetailsPageState extends State<GameDetailsPage> {
                 const SizedBox(width: 6),
               ],
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: _getStatusColor().withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
@@ -556,8 +572,77 @@ class _GameDetailsPageState extends State<GameDetailsPage> {
           ),
           const SizedBox(height: 20),
 
-          // Details Section
-          _buildDetailRow(Icons.person_pin_rounded, 'Host', _model.organizerName ?? 'Player'),
+          // Details Section - Host with message button
+          Row(
+            children: [
+              Icon(Icons.person_pin_rounded,
+                  size: 16, color: Colors.white.withValues(alpha: 0.6)),
+              const SizedBox(width: 10),
+              Text(
+                'Host:',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.white.withValues(alpha: 0.6),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _model.organizerName ?? 'Player',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              // Message icon button (if not creator)
+              if (_model.game!.createdBy != currentUserUid) ...[
+                const SizedBox(width: 8),
+                InkWell(
+                  onTap: _model.isCreatingChat
+                      ? null
+                      : () => _messageOrganizer(_model.game!.createdBy),
+                  borderRadius: BorderRadius.circular(24),
+                  child: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: _model.isCreatingChat
+                          ? Colors.grey.withValues(alpha: 0.2)
+                          : FlutterFlowTheme.of(context)
+                              .primary
+                              .withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: _model.isCreatingChat
+                            ? Colors.grey.withValues(alpha: 0.5)
+                            : FlutterFlowTheme.of(context)
+                                .primary
+                                .withValues(alpha: 0.5),
+                        width: 1.5,
+                      ),
+                    ),
+                    child: _model.isCreatingChat
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              color: Colors.white.withValues(alpha: 0.8),
+                            ),
+                          )
+                        : Icon(
+                            Icons.chat_bubble,
+                            size: 20,
+                            color: FlutterFlowTheme.of(context).primary,
+                          ),
+                  ),
+                ),
+              ],
+            ],
+          ),
           const SizedBox(height: 16),
 
           // Venue button (larger, prominent) with date/time
@@ -586,7 +671,8 @@ class _GameDetailsPageState extends State<GameDetailsPage> {
                     // Date and Time at top
                     Row(
                       children: [
-                        Icon(Icons.calendar_today, size: 14, color: Colors.blue),
+                        Icon(Icons.calendar_today,
+                            size: 14, color: Colors.blue),
                         const SizedBox(width: 6),
                         Text(
                           game.formattedDate,
@@ -678,11 +764,13 @@ class _GameDetailsPageState extends State<GameDetailsPage> {
           else
             Column(
               children: [
-                _buildDetailRow(Icons.calendar_today, 'Date', game.formattedDate),
+                _buildDetailRow(
+                    Icons.calendar_today, 'Date', game.formattedDate),
                 const SizedBox(height: 12),
                 _buildDetailRow(Icons.access_time, 'Time', game.formattedTime),
                 const SizedBox(height: 12),
-                _buildDetailRow(Icons.location_on, 'Location', game.locationDisplay),
+                _buildDetailRow(
+                    Icons.location_on, 'Location', game.locationDisplay),
               ],
             ),
           const SizedBox(height: 16),
@@ -690,8 +778,15 @@ class _GameDetailsPageState extends State<GameDetailsPage> {
             Icons.emoji_events,
             'Level',
             game.skillLevel != null ? 'Level ${game.skillLevel}' : 'Open',
-            valueColor: game.skillLevel != null ? _getLevelColor(game.skillLevel) : null,
+            valueColor: game.skillLevel != null
+                ? _getLevelColor(game.skillLevel)
+                : null,
           ),
+
+          // Skill level info message
+          const SizedBox(height: 16),
+          _buildSkillLevelInfoMessage(),
+
           const SizedBox(height: 12),
           _buildDetailRow(
             Icons.currency_rupee,
@@ -700,7 +795,8 @@ class _GameDetailsPageState extends State<GameDetailsPage> {
             valueColor: game.isFree ? Colors.green : Colors.blue,
           ),
           const SizedBox(height: 12),
-          _buildDetailRow(Icons.groups, 'Type', _getGameTypeLabel(game.gameType)),
+          _buildDetailRow(
+              Icons.groups, 'Type', _getGameTypeLabel(game.gameType)),
 
           // Special badges
           if (game.isVenueBooked || game.isWomenOnly || game.isMixedOnly) ...[
@@ -729,7 +825,8 @@ class _GameDetailsPageState extends State<GameDetailsPage> {
             const SizedBox(height: 20),
             Row(
               children: [
-                Icon(Icons.description_rounded, color: Colors.white.withValues(alpha: 0.7), size: 16),
+                Icon(Icons.description_rounded,
+                    color: Colors.white.withValues(alpha: 0.7), size: 16),
                 const SizedBox(width: 8),
                 Text(
                   'Description',
@@ -844,51 +941,51 @@ class _GameDetailsPageState extends State<GameDetailsPage> {
         _model.participants.any((p) => p.userId == currentUserUid);
 
     return Row(
-        children: [
-          // Host
+      children: [
+        // Host
+        Expanded(
+          child: _buildQuickInfoCard(
+            Icons.person_pin_rounded,
+            'Host',
+            _model.organizerName ?? 'Player',
+            _getSportColor(),
+          ),
+        ),
+        const SizedBox(width: 8),
+        // Venue/Chat
+        if (_model.game!.venueId != null)
           Expanded(
-            child: _buildQuickInfoCard(
-              Icons.person_pin_rounded,
-              'Host',
-              _model.organizerName ?? 'Player',
-              _getSportColor(),
+            child: InkWell(
+              onTap: _openDirections,
+              child: _buildQuickInfoCard(
+                Icons.location_on,
+                'Venue',
+                _model.venueName ?? game.locationDisplay,
+                Colors.blue,
+                icon2: Icons.directions_rounded,
+              ),
+            ),
+          )
+        else if (game.chatRoomId != null)
+          Expanded(
+            child: InkWell(
+              onTap: hasJoined
+                  ? () {
+                      context.pushNamed(
+                        'ChatRoomWidget',
+                        queryParameters: {'roomId': game.chatRoomId!},
+                      );
+                    }
+                  : null,
+              child: _buildQuickInfoCard(
+                Icons.chat_bubble_rounded,
+                'Chat',
+                hasJoined ? 'Open' : 'Join first',
+                hasJoined ? Colors.green : Colors.grey,
+              ),
             ),
           ),
-          const SizedBox(width: 8),
-          // Venue/Chat
-          if (_model.game!.venueId != null)
-            Expanded(
-              child: InkWell(
-                onTap: _openDirections,
-                child: _buildQuickInfoCard(
-                  Icons.location_on,
-                  'Venue',
-                  _model.venueName ?? game.locationDisplay,
-                  Colors.blue,
-                  icon2: Icons.directions_rounded,
-                ),
-              ),
-            )
-          else if (game.chatRoomId != null)
-            Expanded(
-              child: InkWell(
-                onTap: hasJoined
-                    ? () {
-                        context.pushNamed(
-                          'ChatRoomWidget',
-                          queryParameters: {'roomId': game.chatRoomId!},
-                        );
-                      }
-                    : null,
-                child: _buildQuickInfoCard(
-                  Icons.chat_bubble_rounded,
-                  'Chat',
-                  hasJoined ? 'Open' : 'Join first',
-                  hasJoined ? Colors.green : Colors.grey,
-                ),
-              ),
-            ),
-        ],
+      ],
     );
   }
 
@@ -985,9 +1082,7 @@ class _GameDetailsPageState extends State<GameDetailsPage> {
                   child: _buildDetailItem(
                 Icons.emoji_events,
                 'Level',
-                game.skillLevel != null
-                    ? 'Level ${game.skillLevel}'
-                    : 'Open',
+                game.skillLevel != null ? 'Level ${game.skillLevel}' : 'Open',
                 valueColor: game.skillLevel != null
                     ? _getLevelColor(game.skillLevel)
                     : null,
@@ -1009,17 +1104,14 @@ class _GameDetailsPageState extends State<GameDetailsPage> {
               Icons.groups, 'Type', _getGameTypeLabel(game.gameType)),
 
           // Special badges
-          if (game.isVenueBooked ||
-              game.isWomenOnly ||
-              game.isMixedOnly) ...[
+          if (game.isVenueBooked || game.isWomenOnly || game.isMixedOnly) ...[
             const SizedBox(height: 12),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
                 if (game.isVenueBooked)
-                  _buildSmallBadge(
-                      'Booked', Icons.check_circle, Colors.green),
+                  _buildSmallBadge('Booked', Icons.check_circle, Colors.green),
                 if (game.isWomenOnly)
                   _buildSmallBadge('Women', Icons.female, Colors.pink),
                 if (game.isMixedOnly)
@@ -1084,6 +1176,153 @@ class _GameDetailsPageState extends State<GameDetailsPage> {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildSkillLevelInfoMessage() {
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _isSkillInfoExpanded = !_isSkillInfoExpanded;
+        });
+      },
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              Colors.amber.shade400.withValues(alpha: 0.15),
+              Colors.orange.shade400.withValues(alpha: 0.1),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: Colors.amber.shade400.withValues(alpha: 0.3),
+            width: 1.5,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header with icon, title, and arrow
+            Row(
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  size: 16,
+                  color: Colors.amber.shade400,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Please book according to your skill level',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                Icon(
+                  _isSkillInfoExpanded
+                      ? Icons.keyboard_arrow_up
+                      : Icons.keyboard_arrow_down,
+                  color: Colors.amber.shade400,
+                  size: 20,
+                ),
+              ],
+            ),
+            // Expandable content
+            if (_isSkillInfoExpanded) ...[
+              const SizedBox(height: 12),
+              // Warning message
+              Text(
+                'Joining games that don\'t match your skill level may impact everyone\'s game experience.',
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.85),
+                  fontSize: 13,
+                  height: 1.4,
+                ),
+              ),
+              const SizedBox(height: 12),
+              // Skill levels list
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.2),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Skill Levels Guide:',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.7),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildLevelItem('1', 'Beginner', Colors.green.shade300),
+                    const SizedBox(height: 6),
+                    _buildLevelItem(
+                        '2', 'Beginner-Intermediate', Colors.lightGreen.shade300),
+                    const SizedBox(height: 6),
+                    _buildLevelItem('3', 'Intermediate', Colors.yellow.shade400),
+                    const SizedBox(height: 6),
+                    _buildLevelItem(
+                        '4', 'Upper Intermediate', Colors.orange.shade300),
+                    const SizedBox(height: 6),
+                    _buildLevelItem('5', 'Advanced', Colors.orange.shade400),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLevelItem(String level, String label, Color color) {
+    return Row(
+      children: [
+        Container(
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            color: color.withValues(alpha: 0.2),
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: color.withValues(alpha: 0.5),
+              width: 1.5,
+            ),
+          ),
+          child: Center(
+            child: Text(
+              level,
+              style: TextStyle(
+                color: color,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Text(
+          label,
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.8),
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+      ],
     );
   }
 
@@ -1303,8 +1542,7 @@ class _GameDetailsPageState extends State<GameDetailsPage> {
         children: [
           Row(
             children: [
-              Icon(Icons.description_rounded,
-                  color: Colors.white, size: 16),
+              Icon(Icons.description_rounded, color: Colors.white, size: 16),
               const SizedBox(width: 8),
               Text(
                 'Description',
@@ -1656,10 +1894,7 @@ class _GameDetailsPageState extends State<GameDetailsPage> {
           ],
 
           // Join/Book button
-          if (!isCreator &&
-              !hasJoined &&
-              game.status == 'open' &&
-              !game.isFull)
+          if (!isCreator && !hasJoined && game.status == 'open' && !game.isFull)
             _buildActionButton(
               label: _model.isJoining
                   ? 'Processing...'
@@ -1909,7 +2144,8 @@ class _GameDetailsPageState extends State<GameDetailsPage> {
 
     final userName = userData?['first_name'] as String? ?? 'User';
     final userEmail = userData?['email'] as String?;
-    final userContact = currentPhoneNumber.isNotEmpty ? currentPhoneNumber : null;
+    final userContact =
+        currentPhoneNumber.isNotEmpty ? currentPhoneNumber : null;
 
     if (!mounted) return;
 
@@ -2036,6 +2272,50 @@ class _GameDetailsPageState extends State<GameDetailsPage> {
     }
   }
 
+  /// Create or get chat room with organizer and navigate to it
+  Future<void> _messageOrganizer(String organizerId) async {
+    setState(() => _model.isCreatingChat = true);
+
+    try {
+      final roomId = await MapService.createOrGetChatRoom(
+        userId1: currentUserUid,
+        userId2: organizerId,
+      );
+
+      if (mounted) {
+        setState(() => _model.isCreatingChat = false);
+
+        if (roomId != null) {
+          // Navigate to chat room
+          context.pushNamed(
+            'ChatRoom',
+            queryParameters: {
+              'roomId': roomId,
+            },
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to create chat. Please try again.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('Error creating chat with organizer: $e');
+      if (mounted) {
+        setState(() => _model.isCreatingChat = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to create chat. Please try again.'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _openDirections() async {
     if (_model.venueLatitude == null || _model.venueLongitude == null) {
       // Fallback to address-based search
@@ -2151,7 +2431,8 @@ Download FunCircle app to join this game!
             style: TextButton.styleFrom(
               backgroundColor: Colors.red.withValues(alpha: 0.2),
             ),
-            child: const Text('Yes, Cancel Game', style: TextStyle(color: Colors.red)),
+            child: const Text('Yes, Cancel Game',
+                style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
