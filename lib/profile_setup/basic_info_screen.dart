@@ -5,6 +5,7 @@ import '/flutter_flow/flutter_flow_util.dart';
 import '/profile_setup/sports_selection_screen.dart';
 import '/auth/firebase_auth/auth_util.dart';
 import '/backend/supabase/supabase.dart';
+import '/custom_code/actions/index.dart' as actions;
 
 class BasicInfoScreen extends StatefulWidget {
   const BasicInfoScreen({super.key});
@@ -22,11 +23,42 @@ class _BasicInfoScreenState extends State<BasicInfoScreen> {
   final _referralCodeController = TextEditingController();
   String? _selectedGender;
   bool _isLoadingName = true;
+  LatLng? _userLocation;
+  bool _isLoadingLocation = false;
+  String _locationStatus = 'Not captured';
 
   @override
   void initState() {
     super.initState();
     _loadExistingName();
+    _captureLocation();
+  }
+
+  /// Capture user's current location
+  Future<void> _captureLocation() async {
+    setState(() {
+      _isLoadingLocation = true;
+      _locationStatus = 'Capturing...';
+    });
+
+    try {
+      final location = await actions.getCurrentLocation();
+      if (mounted) {
+        setState(() {
+          _userLocation = location;
+          _isLoadingLocation = false;
+          _locationStatus = location != null ? 'Location captured' : 'Failed to get location';
+        });
+      }
+    } catch (e) {
+      print('Error capturing location: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingLocation = false;
+          _locationStatus = 'Error getting location';
+        });
+      }
+    }
   }
 
   /// Load existing name from Supabase or Firebase (for Apple/Google Sign In)
@@ -82,6 +114,11 @@ class _BasicInfoScreenState extends State<BasicInfoScreen> {
 
   void _continue() {
     if (_formKey.currentState!.validate() && _selectedGender != null) {
+      // Debug: Log location data before navigation
+      print('DEBUG: Navigating to sports selection with location:');
+      print('  Latitude: ${_userLocation?.latitude}');
+      print('  Longitude: ${_userLocation?.longitude}');
+
       // Navigate to sports selection
       context.pushNamed(
         SportsSelectionScreen.routeName,
@@ -94,6 +131,8 @@ class _BasicInfoScreenState extends State<BasicInfoScreen> {
               : null,
             ParamType.String
           ),
+          'latitude': serializeParam(_userLocation?.latitude, ParamType.double),
+          'longitude': serializeParam(_userLocation?.longitude, ParamType.double),
         }.withoutNulls,
       );
     } else if (_selectedGender == null) {
@@ -501,6 +540,109 @@ class _BasicInfoScreenState extends State<BasicInfoScreen> {
                             ),
                           ),
                         ],
+                      ),
+                    ),
+                    SizedBox(height: 20),
+
+                    // Location capture section
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: Container(
+                          padding: EdgeInsets.all(20),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(20),
+                            gradient: LinearGradient(
+                              colors: [
+                                Colors.white.withOpacity(0.1),
+                                Colors.white.withOpacity(0.05),
+                              ],
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                            ),
+                            border: Border.all(
+                              color: _userLocation != null
+                                  ? Colors.green.withOpacity(0.4)
+                                  : Colors.white.withOpacity(0.2),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 50,
+                                height: 50,
+                                decoration: BoxDecoration(
+                                  color: _userLocation != null
+                                      ? Colors.green.withOpacity(0.3)
+                                      : Colors.white.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  _userLocation != null
+                                      ? Icons.location_on
+                                      : Icons.location_off,
+                                  color: _userLocation != null
+                                      ? Colors.green
+                                      : Colors.white.withOpacity(0.6),
+                                  size: 28,
+                                ),
+                              ),
+                              SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Location',
+                                      style: TextStyle(
+                                        color: FlutterFlowTheme.of(context)
+                                            .tertiary
+                                            .withOpacity(0.7),
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                    SizedBox(height: 4),
+                                    Text(
+                                      _locationStatus,
+                                      style: TextStyle(
+                                        color: _userLocation != null
+                                            ? Colors.green.shade300
+                                            : FlutterFlowTheme.of(context)
+                                                .tertiary
+                                                .withOpacity(0.5),
+                                        fontSize: 13,
+                                        letterSpacing: 0.2,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (_isLoadingLocation)
+                                SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Color(0xFF6C63FF),
+                                    ),
+                                  ),
+                                )
+                              else if (_userLocation == null)
+                                IconButton(
+                                  onPressed: _captureLocation,
+                                  icon: Icon(
+                                    Icons.refresh,
+                                    color: Color(0xFF6C63FF),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
                     SizedBox(height: 40),

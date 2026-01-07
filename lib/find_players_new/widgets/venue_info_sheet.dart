@@ -63,8 +63,13 @@ class VenueInfoSheet extends StatelessWidget {
                   ),
                   const SizedBox(height: 20),
 
-                  // Venue image
-                  if (venue.images != null && venue.images!.isNotEmpty)
+                  // Venue image - validate URL before loading
+                  if (venue.images != null &&
+                      venue.images!.isNotEmpty &&
+                      (venue.images!.first.startsWith('http') ||
+                       venue.images!.first.contains('.jpg') ||
+                       venue.images!.first.contains('.png') ||
+                       venue.images!.first.contains('.jpeg')))
                     ClipRRect(
                       borderRadius: BorderRadius.circular(12),
                       child: CachedNetworkImage(

@@ -1,6 +1,7 @@
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/index.dart';
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'navbarnew_model.dart';
 export 'navbarnew_model.dart';
@@ -43,29 +44,89 @@ class _NavbarnewWidgetState extends State<NavbarnewWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final tabWidth = (screenWidth - 40) / 4; // 4 tabs with padding
+
     return Align(
       alignment: AlignmentDirectional(0.0, 1.0),
-      child: Container(
-        width: double.infinity,
-        decoration: BoxDecoration(
-          color: FlutterFlowTheme.of(context).secondary,
-          boxShadow: [
-            BoxShadow(
-              blurRadius: 15.0,
-              color: Color(0x0F000000),
-              offset: Offset(
-                0.0,
-                4.0,
+      child: Padding(
+        padding: EdgeInsetsDirectional.fromSTEB(12.0, 0.0, 12.0, 20.0),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24.0),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20.0, sigmaY: 20.0),
+            child: Container(
+              decoration: BoxDecoration(
+                color: FlutterFlowTheme.of(context).secondary.withOpacity(0.65),
+                borderRadius: BorderRadius.circular(24.0),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.15),
+                  width: 1.0,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.15),
+                    blurRadius: 20.0,
+                    offset: Offset(0, 8),
+                    spreadRadius: 0,
+                  ),
+                  BoxShadow(
+                    color: Colors.white.withOpacity(0.1),
+                    blurRadius: 1.0,
+                    offset: Offset(0, -1),
+                    spreadRadius: 0,
+                  ),
+                ],
               ),
-            )
-          ],
-          borderRadius: BorderRadius.circular(0.0),
-        ),
-        child: Padding(
-          padding: EdgeInsetsDirectional.fromSTEB(5.0, 14.0, 5.0, 14.0),
-          child: Row(
-            mainAxisSize: MainAxisSize.max,
-            children: [
+              child: Stack(
+                children: [
+                  // Animated pill indicator (Liquid Glass effect)
+                  AnimatedPositioned(
+                    duration: Duration(milliseconds: 350),
+                    curve: Curves.easeInOutCubic,
+                    left: 20 + (tabWidth * widget.number) + (tabWidth - 60) / 2,
+                    bottom: 6,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: BackdropFilter(
+                        filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                        child: Container(
+                          width: 60,
+                          height: 5,
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [
+                                FlutterFlowTheme.of(context).primary.withOpacity(0.9),
+                                FlutterFlowTheme.of(context).primary.withOpacity(0.7),
+                              ],
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                            ),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: FlutterFlowTheme.of(context).primary.withOpacity(0.5),
+                                blurRadius: 12,
+                                spreadRadius: 0,
+                              ),
+                              BoxShadow(
+                                color: FlutterFlowTheme.of(context).primary.withOpacity(0.3),
+                                blurRadius: 6,
+                                offset: Offset(0, 2),
+                                spreadRadius: 0,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  // Tab items
+                  Padding(
+                    padding: EdgeInsetsDirectional.fromSTEB(8.0, 12.0, 8.0, 12.0),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.max,
+                      children: [
               Expanded(
                 child: InkWell(
                   splashColor: Colors.transparent,
@@ -271,7 +332,12 @@ class _NavbarnewWidgetState extends State<NavbarnewWidget> {
                   ),
                 ),
               ),
-            ],
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ),
       ),

@@ -667,6 +667,8 @@ class _MyProfileWidgetState extends State<MyProfileWidget> {
   Widget _buildSkillLevelsSection(dynamic profile) {
     final badmintonLevel = profile.skillLevelBadminton;
     final pickleballLevel = profile.skillLevelPickleball;
+    final tennisLevel = profile.skillLevelTennis;
+    final padelLevel = profile.skillLevelPadel;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -685,7 +687,7 @@ class _MyProfileWidgetState extends State<MyProfileWidget> {
                   color: Colors.white,
                 ),
               ),
-              if (badmintonLevel == null || pickleballLevel == null)
+              if (badmintonLevel == null || pickleballLevel == null || tennisLevel == null || padelLevel == null)
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
@@ -737,6 +739,28 @@ class _MyProfileWidgetState extends State<MyProfileWidget> {
                   pickleballLevel ?? 0,
                   const Color(0xFF2196F3),
                   isEmpty: pickleballLevel == null,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _buildSkillCard(
+                  '🎾 Tennis',
+                  tennisLevel ?? 0,
+                  const Color(0xFFFF9800),
+                  isEmpty: tennisLevel == null,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildSkillCard(
+                  '🏓 Padel',
+                  padelLevel ?? 0,
+                  const Color(0xFF9C27B0),
+                  isEmpty: padelLevel == null,
                 ),
               ),
             ],

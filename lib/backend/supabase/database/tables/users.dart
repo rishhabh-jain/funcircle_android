@@ -153,6 +153,12 @@ class UsersRow extends SupabaseDataRow {
   int? get skillLevelPickleball => getField<int>('skill_level_pickleball');
   set skillLevelPickleball(int? value) => setField<int>('skill_level_pickleball', value);
 
+  int? get skillLevelTennis => getField<int>('skill_level_tennis');
+  set skillLevelTennis(int? value) => setField<int>('skill_level_tennis', value);
+
+  int? get skillLevelPadel => getField<int>('skill_level_padel');
+  set skillLevelPadel(int? value) => setField<int>('skill_level_padel', value);
+
   List<String> get preferredSports => getListField<String>('preferred_sports');
   set preferredSports(List<String>? value) => setListField<String>('preferred_sports', value);
 

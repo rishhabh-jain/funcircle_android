@@ -36,24 +36,24 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
     super.initState();
     _model = createModel(context, () => PlaynewModel());
 
-    // Initialize on page load
+    // Initialize on page load - PROGRESSIVE LOADING (non-blocking)
     SchedulerBinding.instance.addPostFrameCallback((_) async {
-      // Check and create new user offer (50% off first game)
-      if (currentUserUid.isNotEmpty) {
-        await NewUserOfferService.checkAndCreateNewUserOffer(currentUserUid);
-      }
+      // Run independent operations in PARALLEL
+      await Future.wait([
+        // 1. Check new user offer (non-critical, runs in background)
+        if (currentUserUid.isNotEmpty)
+          NewUserOfferService.checkAndCreateNewUserOffer(currentUserUid)
+              .catchError((e) => print('Offer check error: $e')),
 
-      // Fetch user location
-      await _fetchUserLocation();
+        // 2. Fetch user location
+        _fetchUserLocation(),
 
-      // Load venues
-      await _loadVenues();
+        // 3. Load venues
+        _loadVenues(),
+      ]);
 
-      // Auto-select AM/PM based on which has more games
-      await _selectBestTimeOfDay();
-
-      // Load games
-      await _loadGames();
+      // After venues are loaded, load games with optimized query
+      await _loadGamesOptimized();
     });
 
     WidgetsBinding.instance.addPostFrameCallback((_) => safeSetState(() {}));
@@ -215,9 +215,15 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
       if (mounted) {
         _allVenues = venuesData;
 
-        // Calculate distances if location is available
+        // INSTANT: Calculate straight-line distances first (no API call)
         if (_model.userLocation != null) {
-          await _calculateVenueDistances();
+          _calculateStraightLineDistances();
+        }
+
+        // BACKGROUND: Calculate accurate road distances via Google API (non-blocking)
+        // This will update the distances when ready
+        if (_model.userLocation != null) {
+          _calculateVenueDistances(); // No await!
         }
 
         // First check if there's a saved venue in app state
@@ -288,13 +294,104 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
     }
   }
 
-  /// Calculate distances to venues
+  /// INSTANT: Calculate straight-line distances using Haversine formula
+  /// This runs synchronously (no API call) and provides immediate approximate distances
+  void _calculateStraightLineDistances() {
+    if (_model.userLocation == null) return;
+
+    print('📏 Calculating straight-line distances (instant)...');
+
+    _model.venueDistances.clear();
+
+    for (final venue in _allVenues) {
+      if (venue.lat != null && venue.lng != null) {
+        final distance = _calculateHaversineDistance(
+          _model.userLocation!.latitude,
+          _model.userLocation!.longitude,
+          venue.lat!,
+          venue.lng!,
+        );
+        _model.venueDistances[venue.id] = distance;
+      }
+    }
+
+    print('✅ Straight-line distances ready for ${_model.venueDistances.length} venues');
+
+    // Trigger UI update to show venues sorted by approximate distance
+    if (mounted) {
+      safeSetState(() {});
+    }
+  }
+
+  /// Haversine formula to calculate straight-line distance between two points
+  /// Returns distance in kilometers
+  double _calculateHaversineDistance(
+    double lat1,
+    double lon1,
+    double lat2,
+    double lon2,
+  ) {
+    const double earthRadiusKm = 6371.0;
+
+    // Convert degrees to radians
+    final dLat = _degreesToRadians(lat2 - lat1);
+    final dLon = _degreesToRadians(lon2 - lon1);
+    final radLat1 = _degreesToRadians(lat1);
+    final radLat2 = _degreesToRadians(lat2);
+
+    // Haversine formula
+    final a = _sin(dLat / 2) * _sin(dLat / 2) +
+        _cos(radLat1) * _cos(radLat2) * _sin(dLon / 2) * _sin(dLon / 2);
+    final c = 2 * _atan2(_sqrt(a), _sqrt(1 - a));
+
+    return earthRadiusKm * c;
+  }
+
+  double _degreesToRadians(double degrees) => degrees * 3.14159265359 / 180.0;
+
+  double _sin(double x) => x - (x * x * x) / 6 + (x * x * x * x * x) / 120;
+
+  double _cos(double x) => 1 - (x * x) / 2 + (x * x * x * x) / 24;
+
+  double _sqrt(double x) {
+    if (x == 0) return 0;
+    double guess = x / 2;
+    for (int i = 0; i < 10; i++) {
+      guess = (guess + x / guess) / 2;
+    }
+    return guess;
+  }
+
+  double _atan2(double y, double x) {
+    if (x > 0) {
+      return _atan(y / x);
+    } else if (x < 0 && y >= 0) {
+      return _atan(y / x) + 3.14159265359;
+    } else if (x < 0 && y < 0) {
+      return _atan(y / x) - 3.14159265359;
+    } else if (x == 0 && y > 0) {
+      return 3.14159265359 / 2;
+    } else if (x == 0 && y < 0) {
+      return -3.14159265359 / 2;
+    }
+    return 0;
+  }
+
+  double _atan(double x) {
+    return x - (x * x * x) / 3 + (x * x * x * x * x) / 5 -
+           (x * x * x * x * x * x * x) / 7;
+  }
+
+  /// Calculate distances to venues (runs in BACKGROUND, non-blocking)
+  /// When distances are ready, updates UI and re-sorts venues by distance
   Future<void> _calculateVenueDistances() async {
     if (_model.userLocation == null) return;
     if (_model.isCalculatingDistances) return;
 
     try {
       safeSetState(() => _model.isCalculatingDistances = true);
+
+      print('🚀 Starting distance calculation in background...');
 
       final result = await actions.calculateDistanceMatrix(
         _model.userLocation!,
@@ -324,6 +421,11 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
 
           _model.lastCalculatedLocation = _model.userLocation;
         });
+
+        print('✅ Distances calculated! Updating UI with distance info...');
+
+        // Trigger UI update to show distances in venue selector
+        safeSetState(() {});
       }
     } catch (e) {
       print('Error calculating distances: $e');
@@ -357,52 +459,6 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
     return filtered;
   }
 
-  /// Auto-select AM or PM based on which has more games
-  Future<void> _selectBestTimeOfDay() async {
-    if (_model.selectedVenueId == null) {
-      print('Cannot select time of day: No venue selected');
-      return;
-    }
-
-    try {
-      final dateStr = DateFormat('yyyy-MM-dd').format(_model.selectedDate);
-      print('Auto-selecting time for date: $dateStr, venue: ${_model.selectedVenueId}, sport: ${_model.selectedSportType}');
-
-      // Get games for both AM and PM
-      final amGames = await GameService.getGamesForVenueAndDate(
-        sportType: _model.selectedSportType,
-        venueId: _model.selectedVenueId,
-        date: dateStr,
-        timeOfDay: 'am',
-      );
-
-      final pmGames = await GameService.getGamesForVenueAndDate(
-        sportType: _model.selectedSportType,
-        venueId: _model.selectedVenueId,
-        date: dateStr,
-        timeOfDay: 'pm',
-      );
-
-      print('AM games: ${amGames.length}, PM games: ${pmGames.length}');
-
-      if (mounted) {
-        safeSetState(() {
-          // Select the time period with more games, default to PM if equal or both zero
-          if (amGames.isEmpty && pmGames.isEmpty) {
-            // No games at all, keep current selection or default to PM
-            print('No games found, keeping current selection: ${_model.currentAmOrPm}');
-          } else {
-            _model.currentAmOrPm = amGames.length > pmGames.length ? 'am' : 'pm';
-            print('Selected: ${_model.currentAmOrPm}');
-          }
-        });
-      }
-    } catch (e) {
-      print('Error selecting best time of day: $e');
-      // Keep default (pm) if error occurs
-    }
-  }
-
   /// Load games from database
   Future<void> _loadGames() async {
     if (_model.selectedVenueId == null) return;
@@ -427,6 +483,69 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
       }
     } catch (e) {
       print('Error loading games: $e');
+      if (mounted) {
+        safeSetState(() {
+          _model.games = [];
+          _model.isLoadingGames = false;
+        });
+      }
+    }
+  }
+
+  /// OPTIMIZED: Load games and auto-select best time (AM/PM) in one operation
+  /// Reduces 3 queries to 2 parallel queries
+  Future<void> _loadGamesOptimized() async {
+    if (_model.selectedVenueId == null) {
+      print('Cannot load games: No venue selected');
+      return;
+    }
+
+    safeSetState(() => _model.isLoadingGames = true);
+
+    try {
+      final dateStr = DateFormat('yyyy-MM-dd').format(_model.selectedDate);
+      print('Loading games for date: $dateStr, venue: ${_model.selectedVenueId}, sport: ${_model.selectedSportType}');
+
+      // Query AM and PM games in PARALLEL (not sequential)
+      final results = await Future.wait([
+        GameService.getGamesForVenueAndDate(
+          sportType: _model.selectedSportType,
+          venueId: _model.selectedVenueId,
+          date: dateStr,
+          timeOfDay: 'am',
+        ),
+        GameService.getGamesForVenueAndDate(
+          sportType: _model.selectedSportType,
+          venueId: _model.selectedVenueId,
+          date: dateStr,
+          timeOfDay: 'pm',
+        ),
+      ]);
+
+      final amGames = results[0];
+      final pmGames = results[1];
+
+      print('Loaded: ${amGames.length} AM games, ${pmGames.length} PM games');
+
+      if (mounted) {
+        safeSetState(() {
+          // Auto-select time period with more games, default to PM if equal
+          if (amGames.isEmpty && pmGames.isEmpty) {
+            // No games at all, keep current selection or default to PM
+            _model.currentAmOrPm = _model.currentAmOrPm;
+          } else {
+            _model.currentAmOrPm = amGames.length > pmGames.length ? 'am' : 'pm';
+          }
+
+          // Set the games for the selected time
+          _model.games = _model.currentAmOrPm == 'am' ? amGames : pmGames;
+          _model.isLoadingGames = false;
+
+          print('Selected: ${_model.currentAmOrPm} with ${_model.games.length} games');
+        });
+      }
+    } catch (e) {
+      print('Error loading games optimized: $e');
       if (mounted) {
         safeSetState(() {
           _model.games = [];
@@ -476,9 +595,8 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
                 FFAppState().selectedVenueName = sortedVenues.first.venueName ?? '';
               });
 
-              // Reload games for new venue and auto-select best time
-              await _selectBestTimeOfDay();
-              await _loadGames();
+              // Reload games with optimized query
+              await _loadGamesOptimized();
             }
           }
         },
@@ -551,9 +669,8 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
                             FFAppState().selectedVenueId = venue.id;
                             FFAppState().selectedVenueName = venue.venueName ?? '';
                           });
-                          // Auto-select best AM/PM for the new venue
-                          await _selectBestTimeOfDay();
-                          _loadGames();
+                          // Load games with optimized query
+                          _loadGamesOptimized();
                         },
                         borderRadius: BorderRadius.circular(12),
                         child: Container(
@@ -654,18 +771,7 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoadingVenues) {
-      return Scaffold(
-        backgroundColor: const Color(0xFF0A0A0A),
-        body: Center(
-          child: SpinKitRing(
-            color: FlutterFlowTheme.of(context).primary,
-            size: 50.0,
-          ),
-        ),
-      );
-    }
-
+    // REMOVED BLOCKING LOADING SCREEN - Show UI immediately with progressive loading
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
@@ -836,9 +942,8 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
                     FFAppState().selectedVenueName = sortedVenues.first.venueName ?? '';
                   });
 
-                  // Reload games for new venue and auto-select best time
-                  await _selectBestTimeOfDay();
-                  await _loadGames();
+                  // Reload games with optimized query
+                  await _loadGamesOptimized();
                 }
               }
             },
@@ -967,8 +1072,6 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
 
   /// Build venue selector
   Widget _buildVenueSelector() {
-    final hasVenues = _getSortedVenuesBySport().isNotEmpty;
-
     // Get sport-specific icon
     IconData getSportIcon() {
       switch (_model.selectedSportType) {
@@ -982,6 +1085,77 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
           return Icons.location_city;
       }
     }
+
+    // SKELETON STATE: Show loading placeholder while venues are loading
+    if (_isLoadingVenues) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(10),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.15),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    getSportIcon(),
+                    color: Colors.white.withValues(alpha: 0.4),
+                    size: 18,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          height: 14,
+                          width: 120,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Container(
+                          height: 11,
+                          width: 80,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(
+                        Colors.white.withValues(alpha: 0.5),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final hasVenues = _getSortedVenuesBySport().isNotEmpty;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -1027,15 +1201,60 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
                         if (hasVenues && _getVenueDistanceText() != null)
                           Padding(
                             padding: const EdgeInsets.only(top: 2),
-                            child: Text(
-                              _getVenueDistanceText()!,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.6),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w400,
-                              ),
+                            child: Row(
+                              children: [
+                                Text(
+                                  _getVenueDistanceText()!,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.6),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w400,
+                                  ),
+                                ),
+                                if (_model.isCalculatingDistances) ...[
+                                  const SizedBox(width: 6),
+                                  SizedBox(
+                                    width: 10,
+                                    height: 10,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 1.5,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white.withValues(alpha: 0.4),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          )
+                        else if (hasVenues && _model.isCalculatingDistances)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Row(
+                              children: [
+                                Text(
+                                  'Calculating distances...',
+                                  style: TextStyle(
+                                    color: Colors.white.withValues(alpha: 0.4),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w400,
+                                    fontStyle: FontStyle.italic,
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                SizedBox(
+                                  width: 10,
+                                  height: 10,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 1.5,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      Colors.white.withValues(alpha: 0.4),
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                       ],
@@ -1091,9 +1310,8 @@ class _PlaynewWidgetState extends State<PlaynewWidget> {
         safeSetState(() {
           _model.selectedDate = date;
         });
-        // Auto-select best AM/PM for the new date
-        await _selectBestTimeOfDay();
-        _loadGames();
+        // Load games with optimized query
+        _loadGamesOptimized();
       },
       child: ClipRRect(
         borderRadius: BorderRadius.circular(10),

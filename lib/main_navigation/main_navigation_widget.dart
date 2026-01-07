@@ -1,6 +1,7 @@
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:ui';
 import '../funcirclefinalapp/home_new/home_new_widget.dart';
 import '../find_players_new/find_players_new_widget.dart';
@@ -67,188 +68,113 @@ class MainNavigationWidgetState extends State<MainNavigationWidget> {
   }
 
   Widget _buildGlassyBottomBar() {
+    // iOS 18-style navigation items with filled/outline icon variants
     final navItems = [
-      {'icon': Icons.home_rounded, 'label': 'Home'},
-      {'icon': Icons.explore_rounded, 'label': 'Find'},
-      {'icon': Icons.sports_tennis_rounded, 'label': 'Play'},
-      {'icon': Icons.calendar_today_rounded, 'label': 'Book'},
-      {'icon': Icons.forum_rounded, 'label': 'Chats'},
+      {'iconOutline': Icons.home_outlined, 'iconFilled': Icons.home_rounded, 'label': 'Home'},
+      {'iconOutline': Icons.explore_outlined, 'iconFilled': Icons.explore_rounded, 'label': 'Find'},
+      {'iconOutline': Icons.sports_tennis_outlined, 'iconFilled': Icons.sports_tennis_rounded, 'label': 'Play'},
+      {'iconOutline': Icons.calendar_today_outlined, 'iconFilled': Icons.calendar_today_rounded, 'label': 'Book'},
+      {'iconOutline': Icons.forum_outlined, 'iconFilled': Icons.forum_rounded, 'label': 'Chats'},
     ];
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 20),
-      child: Stack(
-        children: [
-          // Outer glow effect - ice reflection
-          Container(
-            height: 80,
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 32), // iOS 18: More bottom margin for dramatic float
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(28), // Slightly larger radius
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: 24, sigmaY: 24), // Enhanced blur
+          child: Container(
+            height: 64, // More compact height
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(30),
+              color: FlutterFlowTheme.of(context).secondary.withValues(alpha: 0.7), // Slightly more opaque
+              borderRadius: BorderRadius.circular(28),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.2), // More visible border
+                width: 0.5,
+              ),
               boxShadow: [
-                // Top highlight - ice shine
                 BoxShadow(
-                  color: Colors.white.withValues(alpha: 0.15),
-                  blurRadius: 25,
-                  spreadRadius: -5,
-                  offset: const Offset(0, -8),
-                ),
-                // Main shadow - depth
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.3),
-                  blurRadius: 30,
-                  spreadRadius: 0,
+                  color: Colors.black.withValues(alpha: 0.2),
+                  blurRadius: 24,
                   offset: const Offset(0, 10),
+                  spreadRadius: -2,
                 ),
-                // Orange glow - brand accent
                 BoxShadow(
-                  color: Colors.orange.withValues(alpha: 0.15),
-                  blurRadius: 40,
-                  spreadRadius: -5,
-                  offset: const Offset(0, 5),
+                  color: Colors.white.withValues(alpha: 0.05),
+                  blurRadius: 1,
+                  offset: const Offset(0, -0.5),
+                  spreadRadius: 0,
                 ),
               ],
             ),
-          ),
-          // Main glass container
-          ClipRRect(
-            borderRadius: BorderRadius.circular(30),
-            child: BackdropFilter(
-              filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-              child: Container(
-                height: 80,
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      Colors.white.withValues(alpha: 0.2),
-                      Colors.white.withValues(alpha: 0.1),
-                      Colors.white.withValues(alpha: 0.05),
-                    ],
-                    stops: const [0.0, 0.5, 1.0],
-                  ),
-                  borderRadius: BorderRadius.circular(30),
-                  // Multi-layer border for ice effect
-                  border: Border.all(
-                    width: 2,
-                    color: Colors.white.withValues(alpha: 0.3),
-                  ),
-                ),
-                child: Container(
-                  margin: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(28),
-                    border: Border.all(
-                      width: 1,
-                      color: Colors.white.withValues(alpha: 0.1),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: List.generate(navItems.length, (index) {
-                      final item = navItems[index];
-                      final isSelected = _model.currentPageIndex == index;
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: List.generate(navItems.length, (index) {
+                  final item = navItems[index];
+                  final isSelected = _model.currentPageIndex == index;
 
-                      return Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _model.updatePageIndex(index);
-                            });
-                          },
-                          behavior: HitTestBehavior.opaque,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                // Icon with premium styling
-                                AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  curve: Curves.easeOut,
-                                  width: isSelected ? 56 : 44,
-                                  height: isSelected ? 56 : 44,
-                                  decoration: BoxDecoration(
-                                    gradient: isSelected
-                                        ? const LinearGradient(
-                                            begin: Alignment.topLeft,
-                                            end: Alignment.bottomRight,
-                                            colors: [
-                                              Color(0xFFFF6B35),
-                                              Color(0xFFF7931E),
-                                            ],
-                                          )
-                                        : null,
-                                    borderRadius: BorderRadius.circular(18),
-                                    border: isSelected
-                                        ? Border.all(
-                                            color: Colors.white.withValues(alpha: 0.4),
-                                            width: 2,
-                                          )
-                                        : null,
-                                    boxShadow: isSelected
-                                        ? [
-                                            BoxShadow(
-                                              color: const Color(0xFFFF6B35)
-                                                  .withValues(alpha: 0.5),
-                                              blurRadius: 20,
-                                              spreadRadius: 0,
-                                              offset: const Offset(0, 4),
-                                            ),
-                                            BoxShadow(
-                                              color: Colors.white.withValues(alpha: 0.3),
-                                              blurRadius: 8,
-                                              spreadRadius: -2,
-                                              offset: const Offset(0, -2),
-                                            ),
-                                          ]
-                                        : null,
-                                  ),
-                                  child: Icon(
-                                    item['icon'] as IconData,
-                                    color: isSelected
-                                        ? Colors.white
-                                        : Colors.white.withValues(alpha: 0.4),
-                                    size: isSelected ? 26 : 24,
-                                  ),
-                                ),
-                                const SizedBox(height: 6),
-                                // Label with shadow for readability
-                                Text(
-                                  item['label'] as String,
-                                  style: TextStyle(
-                                    color: isSelected
-                                        ? Colors.white
-                                        : Colors.white.withValues(alpha: 0.5),
-                                    fontSize: isSelected ? 12 : 11,
-                                    fontWeight: isSelected
-                                        ? FontWeight.w800
-                                        : FontWeight.w600,
-                                    letterSpacing: 0.3,
-                                    shadows: isSelected
-                                        ? [
-                                            Shadow(
-                                              color: Colors.black
-                                                  .withValues(alpha: 0.3),
-                                              blurRadius: 4,
-                                            ),
-                                          ]
-                                        : null,
-                                  ),
-                                ),
-                              ],
+                  return Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        // Haptic feedback on tap
+                        HapticFeedback.lightImpact();
+                        setState(() {
+                          _model.updatePageIndex(index);
+                        });
+                      },
+                      behavior: HitTestBehavior.opaque,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeInOutCubic,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // Animated icon with scale effect
+                            AnimatedScale(
+                              scale: isSelected ? 1.1 : 1.0,
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeOutBack, // Spring-like animation
+                              child: Icon(
+                                // Use filled icon when selected, outline when not
+                                isSelected
+                                    ? item['iconFilled'] as IconData
+                                    : item['iconOutline'] as IconData,
+                                color: isSelected
+                                    ? FlutterFlowTheme.of(context).primary
+                                    : FlutterFlowTheme.of(context).secondaryText.withValues(alpha: 0.6),
+                                size: 26,
+                              ),
                             ),
-                          ),
+                            const SizedBox(height: 4),
+                            // Label - smaller and only visible when selected for cleaner look
+                            AnimatedOpacity(
+                              opacity: isSelected ? 1.0 : 0.7,
+                              duration: const Duration(milliseconds: 200),
+                              child: Text(
+                                item['label'] as String,
+                                style: TextStyle(
+                                  color: isSelected
+                                      ? FlutterFlowTheme.of(context).primary
+                                      : FlutterFlowTheme.of(context).secondaryText.withValues(alpha: 0.6),
+                                  fontSize: 10,
+                                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                                  letterSpacing: -0.2,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
-                      );
-                    }),
-                  ),
-                ),
+                      ),
+                    ),
+                  );
+                }),
               ),
             ),
           ),
-        ],
+        ),
       ),
     );
   }

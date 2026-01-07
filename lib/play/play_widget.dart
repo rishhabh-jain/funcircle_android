@@ -97,13 +97,17 @@ class _PlayWidgetState extends State<PlayWidget> {
       child: Scaffold(
         key: scaffoldKey,
         backgroundColor: Colors.black,
+        extendBody: true,
         body: SafeArea(
           top: true,
-          child: SingleChildScrollView(
-            primary: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.max,
-              children: [
+          bottom: false,
+          child: Stack(
+            children: [
+              SingleChildScrollView(
+                primary: false,
+                child: Column(
+                  mainAxisSize: MainAxisSize.max,
+                  children: [
                 Container(
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(0.0),
@@ -358,22 +362,22 @@ class _PlayWidgetState extends State<PlayWidget> {
                     ],
                   ),
                 ),
-                if ((_model.url ==
-                        'https://www.funcircleapp.com/events/90?headhide=true&lat=${functions.getLatitude(FFAppState().userLocation).toString()}&lng=${functions.getLongitude(FFAppState().userLocation).toString()}') ||
-                    (_model.url ==
-                        'https://www.funcircleapp.com/events/104?headhide=true&lat=${functions.getLatitude(FFAppState().userLocation).toString()}&lng=${functions.getLongitude(FFAppState().userLocation).toString()}'))
-                  Align(
-                    alignment: AlignmentDirectional(-1.0, -1.0),
-                    child: wrapWithModel(
-                      model: _model.navbarnewModel,
-                      updateCallback: () => safeSetState(() {}),
-                      child: NavbarnewWidget(
-                        number: 2,
-                      ),
-                    ),
+                  ],
+                ),
+              ),
+              // Floating navigation bar
+              if ((_model.url ==
+                      'https://www.funcircleapp.com/events/90?headhide=true&lat=${functions.getLatitude(FFAppState().userLocation).toString()}&lng=${functions.getLongitude(FFAppState().userLocation).toString()}') ||
+                  (_model.url ==
+                      'https://www.funcircleapp.com/events/104?headhide=true&lat=${functions.getLatitude(FFAppState().userLocation).toString()}&lng=${functions.getLongitude(FFAppState().userLocation).toString()}'))
+                wrapWithModel(
+                  model: _model.navbarnewModel,
+                  updateCallback: () => safeSetState(() {}),
+                  child: NavbarnewWidget(
+                    number: 2,
                   ),
-              ],
-            ),
+                ),
+            ],
           ),
         ),
       ),

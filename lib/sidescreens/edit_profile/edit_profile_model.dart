@@ -22,6 +22,8 @@ class EditProfileModel extends FlutterFlowModel<EditProfileWidget> {
   // Skill levels (1-5 stars)
   int badmintonSkillLevel = 0;
   int pickleballSkillLevel = 0;
+  int tennisSkillLevel = 0;
+  int padelSkillLevel = 0;
 
   // Preferred sports list
   List<String> preferredSports = [];
@@ -46,6 +48,8 @@ class EditProfileModel extends FlutterFlowModel<EditProfileWidget> {
 
     badmintonSkillLevel = userData.skillLevelBadminton ?? 0;
     pickleballSkillLevel = userData.skillLevelPickleball ?? 0;
+    tennisSkillLevel = userData.skillLevelTennis ?? 0;
+    padelSkillLevel = userData.skillLevelPadel ?? 0;
 
     preferredSports = List<String>.from(userData.preferredSports);
 

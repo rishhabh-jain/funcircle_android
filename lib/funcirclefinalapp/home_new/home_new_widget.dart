@@ -330,7 +330,7 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
   Widget _buildSportsAnimation() {
     return InkWell(
       onTap: () {
-        context.pushNamed('findPlayersNew');
+        context.pushNamed('becomeOrganizer');
       },
       borderRadius: BorderRadius.circular(20),
       child: Container(
@@ -341,18 +341,26 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Colors.white.withValues(alpha: 0.15),
-              Colors.white.withValues(alpha: 0.08),
+              const Color(0xFFFF6B35).withValues(alpha: 0.92),
+              const Color(0xFFF7931E).withValues(alpha: 0.88),
+              const Color(0xFFFF6B35).withValues(alpha: 0.85),
             ],
+            stops: const [0.0, 0.5, 1.0],
           ),
           border: Border.all(
-            color: Colors.white.withValues(alpha: 0.3),
-            width: 1.5,
+            color: Colors.white.withValues(alpha: 0.5),
+            width: 2,
           ),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              blurRadius: 20,
+              color: const Color(0xFFFF6B35).withValues(alpha: 0.5),
+              blurRadius: 25,
+              spreadRadius: 2,
+              offset: const Offset(0, 6),
+            ),
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.4),
+              blurRadius: 15,
               spreadRadius: 0,
               offset: const Offset(0, 4),
             ),
@@ -370,7 +378,7 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                         child: Icon(
                           Icons.sports_cricket,
                           size: 38,
-                          color: Colors.white.withValues(alpha: 0.55),
+                          color: Colors.white.withValues(alpha: 0.25),
                         ),
                       ),
                     ),
@@ -384,7 +392,7 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                           Icons
                               .sports_tennis, // Using tennis as badminton placeholder
                           size: 32,
-                          color: Colors.white.withValues(alpha: 0.5),
+                          color: Colors.white.withValues(alpha: 0.22),
                         ),
                       ),
                     ),
@@ -397,7 +405,7 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                         child: Icon(
                           Icons.sports_soccer,
                           size: 36,
-                          color: Colors.white.withValues(alpha: 0.52),
+                          color: Colors.white.withValues(alpha: 0.24),
                         ),
                       ),
                     ),
@@ -410,7 +418,7 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                         child: Icon(
                           Icons.sports_basketball,
                           size: 30,
-                          color: Colors.white.withValues(alpha: 0.45),
+                          color: Colors.white.withValues(alpha: 0.2),
                         ),
                       ),
                     ),
@@ -421,7 +429,7 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                       child: Icon(
                         Icons.sports_tennis,
                         size: 34,
-                        color: Colors.white.withValues(alpha: 0.48),
+                        color: Colors.white.withValues(alpha: 0.23),
                       ),
                     ),
                     // Additional decorative icon (bottom right)
@@ -433,7 +441,7 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                         child: Icon(
                           Icons.sports_volleyball,
                           size: 28,
-                          color: Colors.white.withValues(alpha: 0.42),
+                          color: Colors.white.withValues(alpha: 0.19),
                         ),
                       ),
                     ),
@@ -447,30 +455,30 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
-                              gradient: LinearGradient(
-                                colors: [
-                                  Colors.white.withValues(alpha: 0.15),
-                                  Colors.white.withValues(alpha: 0.05),
-                                ],
-                              ),
+                              color: Colors.white.withValues(alpha: 0.95),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.white.withValues(alpha: 0.2),
-                                  blurRadius: 15,
-                                  spreadRadius: 2,
+                                  color: Colors.white.withValues(alpha: 0.4),
+                                  blurRadius: 20,
+                                  spreadRadius: 3,
+                                ),
+                                BoxShadow(
+                                  color: const Color(0xFFFF6B35).withValues(alpha: 0.3),
+                                  blurRadius: 12,
+                                  spreadRadius: 0,
                                 ),
                               ],
                             ),
                             child: Icon(
-                              Icons.explore_rounded,
-                              color: Colors.white,
+                              Icons.event_available,
+                              color: const Color(0xFFFF6B35),
                               size: 32,
                             ),
                           ),
                           const SizedBox(height: 12),
                           // Main title with glow
                           Text(
-                            'FIND PLAYERS',
+                            'BECOME AN ORGANIZER',
                             style: TextStyle(
                               color: Colors.white,
                               fontSize: 22,
@@ -490,39 +498,41 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                           Row(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              // On Maps
+                              // Free Games
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 12,
-                                  vertical: 4,
+                                  vertical: 5,
                                 ),
                                 decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      Colors.white.withValues(alpha: 0.25),
-                                      Colors.white.withValues(alpha: 0.1),
-                                    ],
-                                  ),
+                                  color: Colors.white.withValues(alpha: 0.92),
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.3),
-                                    width: 1,
+                                    color: Colors.white.withValues(alpha: 0.6),
+                                    width: 1.5,
                                   ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.white.withValues(alpha: 0.3),
+                                      blurRadius: 8,
+                                      spreadRadius: 0,
+                                    ),
+                                  ],
                                 ),
                                 child: Row(
                                   children: [
                                     Icon(
-                                      Icons.map_outlined,
-                                      color: Colors.white,
+                                      Icons.card_giftcard,
+                                      color: const Color(0xFFFF6B35),
                                       size: 14,
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
-                                      'On Maps',
+                                      'Free Games',
                                       style: TextStyle(
-                                        color: Colors.white,
+                                        color: const Color(0xFF1C1C1E),
                                         fontSize: 11,
-                                        fontWeight: FontWeight.w700,
+                                        fontWeight: FontWeight.w800,
                                         letterSpacing: 0.5,
                                       ),
                                     ),
@@ -530,50 +540,41 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              // Online
+                              // Community Leader
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 12,
-                                  vertical: 4,
+                                  vertical: 5,
                                 ),
                                 decoration: BoxDecoration(
-                                  gradient: LinearGradient(
-                                    colors: [
-                                      Colors.white.withValues(alpha: 0.25),
-                                      Colors.white.withValues(alpha: 0.1),
-                                    ],
-                                  ),
+                                  color: Colors.white.withValues(alpha: 0.92),
                                   borderRadius: BorderRadius.circular(12),
                                   border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.3),
-                                    width: 1,
+                                    color: Colors.white.withValues(alpha: 0.6),
+                                    width: 1.5,
                                   ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.white.withValues(alpha: 0.3),
+                                      blurRadius: 8,
+                                      spreadRadius: 0,
+                                    ),
+                                  ],
                                 ),
                                 child: Row(
                                   children: [
-                                    Container(
-                                      width: 8,
-                                      height: 8,
-                                      decoration: BoxDecoration(
-                                        color: Colors.greenAccent,
-                                        shape: BoxShape.circle,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: Colors.greenAccent
-                                                .withValues(alpha: 0.6),
-                                            blurRadius: 8,
-                                            spreadRadius: 1,
-                                          ),
-                                        ],
-                                      ),
+                                    Icon(
+                                      Icons.stars,
+                                      color: const Color(0xFFF7931E),
+                                      size: 14,
                                     ),
                                     const SizedBox(width: 4),
                                     Text(
-                                      'Online',
+                                      'Community Leader',
                                       style: TextStyle(
-                                        color: Colors.white,
+                                        color: const Color(0xFF1C1C1E),
                                         fontSize: 11,
-                                        fontWeight: FontWeight.w700,
+                                        fontWeight: FontWeight.w800,
                                         letterSpacing: 0.5,
                                       ),
                                     ),
@@ -2337,11 +2338,14 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                               if (groupedVenues.length > 1)
                                 Padding(
                                   padding: EdgeInsets.symmetric(vertical: 16.0),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: List.generate(
-                                      groupedVenues.length,
-                                      (index) => AnimatedContainer(
+                                  child: Center(
+                                    child: SingleChildScrollView(
+                                      scrollDirection: Axis.horizontal,
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: List.generate(
+                                          groupedVenues.length,
+                                          (index) => AnimatedContainer(
                                         duration: Duration(milliseconds: 300),
                                         width:
                                             index == _model.currentCarouselPage
@@ -2372,6 +2376,8 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                                               : Colors.grey[700],
                                         ),
                                       ),
+                                    ).toList(),
+                                      ),
                                     ),
                                   ),
                                 ),
@@ -2381,7 +2387,7 @@ class _HomeNewWidgetState extends State<HomeNewWidget>
                       ),
                       // Footer Section
                       Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 40, 16, 32),
+                        padding: const EdgeInsets.fromLTRB(16, 40, 16, 120), // Extra bottom padding for floating nav bar
                         child: Column(
                           children: [
                             // Decorative divider

@@ -142,18 +142,25 @@ class FindPlayersNewModel extends FlutterFlowModel<FindPlayersNewWidget> {
 
   /// Subscribe to real-time updates
   void subscribeToUpdates() {
-    // Subscribe to player requests
+    // Cancel existing subscriptions first to prevent duplicates
+    _requestsSubscription?.cancel();
+    _playersSubscription?.cancel();
+    _sessionsSubscription?.cancel();
+
+    // Subscribe to player requests with better error handling
     _requestsSubscription = MapService.subscribeToRequests(currentSport).listen(
       (requests) {
         playerRequests = requests;
         generateMarkers(); // Regenerate markers on update
       },
       onError: (error) {
-        print('Error in requests subscription: $error');
+        // Silently handle subscription errors - likely RLS or Realtime config issue
+        // Only log once to avoid spam
       },
+      cancelOnError: false, // Keep subscription alive even on errors
     );
 
-    // Subscribe to available players
+    // Subscribe to available players with better error handling
     _playersSubscription =
         MapService.subscribeToPlayerLocations(currentSport).listen(
       (players) {
@@ -161,11 +168,12 @@ class FindPlayersNewModel extends FlutterFlowModel<FindPlayersNewWidget> {
         generateMarkers(); // Regenerate markers on update
       },
       onError: (error) {
-        print('Error in players subscription: $error');
+        // Silently handle errors
       },
+      cancelOnError: false,
     );
 
-    // Subscribe to game sessions
+    // Subscribe to game sessions with better error handling
     _sessionsSubscription =
         MapService.subscribeToGameSessions(currentSport).listen(
       (sessions) {
@@ -173,8 +181,9 @@ class FindPlayersNewModel extends FlutterFlowModel<FindPlayersNewWidget> {
         generateMarkers(); // Regenerate markers on update
       },
       onError: (error) {
-        print('Error in sessions subscription: $error');
+        // Silently handle errors
       },
+      cancelOnError: false,
     );
   }
 

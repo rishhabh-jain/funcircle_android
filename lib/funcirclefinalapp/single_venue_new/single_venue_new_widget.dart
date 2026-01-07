@@ -281,7 +281,14 @@ class _SingleVenueNewWidgetState extends State<SingleVenueNewWidget> {
 
         final venue = venueData.first;
         final images = venue.images;
-        final venueImage = images.isNotEmpty ? images.first : null;
+        // Validate venue image URL
+        String? venueImage;
+        if (images.isNotEmpty) {
+          final rawUrl = images.first;
+          if (rawUrl.startsWith('http') || rawUrl.contains('.jpg') || rawUrl.contains('.png') || rawUrl.contains('.jpeg')) {
+            venueImage = rawUrl;
+          }
+        }
 
         return Scaffold(
           key: scaffoldKey,

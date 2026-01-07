@@ -229,6 +229,18 @@ GoRouter createRouter(AppStateNotifier appStateNotifier) => GoRouter(
               'gender',
               ParamType.String,
             ),
+            referralCode: params.getParam(
+              'referralCode',
+              ParamType.String,
+            ),
+            latitude: params.getParam(
+              'latitude',
+              ParamType.double,
+            ),
+            longitude: params.getParam(
+              'longitude',
+              ParamType.double,
+            ),
           ),
         ),
         FFRoute(

@@ -13,6 +13,8 @@ class SportsSelectionScreen extends StatefulWidget {
     required this.name,
     required this.gender,
     this.referralCode,
+    this.latitude,
+    this.longitude,
   });
 
   static String routeName = 'SportsSelection';
@@ -21,6 +23,8 @@ class SportsSelectionScreen extends StatefulWidget {
   final String name;
   final String gender;
   final String? referralCode;
+  final double? latitude;
+  final double? longitude;
 
   @override
   State<SportsSelectionScreen> createState() => _SportsSelectionScreenState();
@@ -60,6 +64,11 @@ class _SportsSelectionScreenState extends State<SportsSelectionScreen> {
     try {
       final service = ProfileCompletionService(SupaFlow.client);
 
+      // Debug: Log received location data
+      print('DEBUG: SportsSelection received location:');
+      print('  Latitude: ${widget.latitude}');
+      print('  Longitude: ${widget.longitude}');
+
       // Create user profile
       await service.createUserProfile(
         userId: currentUserUid,
@@ -68,7 +77,11 @@ class _SportsSelectionScreenState extends State<SportsSelectionScreen> {
         preferredSports: _selectedSports.toList(),
         email: currentUserEmail.isNotEmpty ? currentUserEmail : null,
         phoneNumber: currentPhoneNumber.isNotEmpty ? currentPhoneNumber : null,
+        latitude: widget.latitude,
+        longitude: widget.longitude,
       );
+
+      print('DEBUG: Profile created, location should be saved');
 
       // Update skill levels
       for (final entry in _skillLevels.entries) {
@@ -249,6 +262,20 @@ class _SportsSelectionScreenState extends State<SportsSelectionScreen> {
                       title: 'Pickleball',
                       icon: Icons.sports_baseball,
                       sport: 'pickleball',
+                    ),
+                    SizedBox(height: 16),
+
+                    _buildSportCard(
+                      title: 'Tennis',
+                      icon: Icons.sports_tennis_outlined,
+                      sport: 'tennis',
+                    ),
+                    SizedBox(height: 16),
+
+                    _buildSportCard(
+                      title: 'Padel',
+                      icon: Icons.sports_handball,
+                      sport: 'padel',
                     ),
                     SizedBox(height: 40),
 

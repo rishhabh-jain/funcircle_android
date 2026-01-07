@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'dart:math' show cos, sqrt, asin;
 import '/backend/supabase/supabase.dart';
 import '/flutter_flow/flutter_flow_theme.dart';
 import '/flutter_flow/flutter_flow_util.dart';
 import '/auth/firebase_auth/auth_util.dart';
+import '/app_state.dart';
 import '../models/game_organizer_model.dart';
 
 /// Application form page for becoming a game organizer
@@ -53,6 +55,15 @@ class _OrganizerApplicationPageState extends State<OrganizerApplicationPage> {
     _bioController.dispose();
     _experienceController.dispose();
     super.dispose();
+  }
+
+  /// Calculate straight-line distance between two points using Haversine formula
+  /// Returns distance in kilometers
+  double _calculateDistance(double lat1, double lon1, double lat2, double lon2) {
+    const p = 0.017453292519943295; // Pi/180
+    final a = 0.5 - cos((lat2 - lat1) * p) / 2 +
+        cos(lat1 * p) * cos(lat2 * p) * (1 - cos((lon2 - lon1) * p)) / 2;
+    return 12742 * asin(sqrt(a)); // 2 * R; R = 6371 km
   }
 
   Future<void> _checkExistingApplication() async {
@@ -121,20 +132,47 @@ class _OrganizerApplicationPageState extends State<OrganizerApplicationPage> {
     });
 
     try {
-      // Load all venues and filter on client side (matching create_game_sheet behavior)
+      // Load all venues with location data
       final response = await SupaFlow.client
           .from('venues')
-          .select('id, venue_name, sport_type, city')
+          .select('id, venue_name, sport_type, city, lat, lng, availableonpass')
+          .eq('availableonpass', true)
           .order('venue_name');
 
       final allVenues = (response as List).cast<Map<String, dynamic>>();
 
       // Filter venues: match selected sport OR 'both'
-      final filteredVenues = allVenues.where((venue) {
+      var filteredVenues = allVenues.where((venue) {
         final sportType = venue['sport_type'] as String?;
         if (sportType == null) return true;
         return sportType == selectedSport || sportType == 'both';
       }).toList();
+
+      // Sort venues by distance from user's current location
+      final userLocation = FFAppState().userLocation;
+      if (userLocation != null) {
+        final userLat = userLocation.latitude;
+        final userLng = userLocation.longitude;
+
+        // Calculate distance for each venue and add to the map
+        for (var venue in filteredVenues) {
+          final venueLat = venue['lat'] as double?;
+          final venueLng = venue['lng'] as double?;
+
+          if (venueLat != null && venueLng != null) {
+            venue['_distance'] = _calculateDistance(userLat, userLng, venueLat, venueLng);
+          } else {
+            venue['_distance'] = double.maxFinite; // Put venues without location at the end
+          }
+        }
+
+        // Sort by distance (closest first)
+        filteredVenues.sort((a, b) {
+          final distA = a['_distance'] as double? ?? double.maxFinite;
+          final distB = b['_distance'] as double? ?? double.maxFinite;
+          return distA.compareTo(distB);
+        });
+      }
 
       setState(() {
         venues = filteredVenues;
@@ -212,6 +250,10 @@ class _OrganizerApplicationPageState extends State<OrganizerApplicationPage> {
             DropdownButtonFormField<String>(
               initialValue: selectedSport,
               dropdownColor: const Color(0xFF1E1E1E),
+              hint: const Text(
+                'Select sport',
+                style: TextStyle(color: Colors.white),
+              ),
               decoration: InputDecoration(
                 filled: true,
                 fillColor: const Color(0xFF1E1E1E),
@@ -223,15 +265,22 @@ class _OrganizerApplicationPageState extends State<OrganizerApplicationPage> {
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
                 ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.5)),
+                ),
                 hintText: 'Select sport',
-                hintStyle: TextStyle(color: Colors.grey.shade400),
+                hintStyle: const TextStyle(color: Colors.white70),
+                labelStyle: const TextStyle(color: Colors.white),
               ),
-              style: const TextStyle(color: Colors.white),
+              style: const TextStyle(color: Colors.white, fontSize: 16),
               items: const [
                 DropdownMenuItem(
-                    value: 'badminton', child: Text('🏸 Badminton')),
+                    value: 'badminton',
+                    child: Text('🏸 Badminton', style: TextStyle(color: Colors.white))),
                 DropdownMenuItem(
-                    value: 'pickleball', child: Text('🎾 Pickleball')),
+                    value: 'pickleball',
+                    child: Text('🎾 Pickleball', style: TextStyle(color: Colors.white))),
               ],
               onChanged: (value) {
                 setState(() {
@@ -679,6 +728,10 @@ class _OrganizerApplicationPageState extends State<OrganizerApplicationPage> {
       initialValue: selectedVenueId,
       isExpanded: true,
       dropdownColor: const Color(0xFF1E1E1E),
+      hint: const Text(
+        'Select venue',
+        style: TextStyle(color: Colors.white),
+      ),
       decoration: InputDecoration(
         filled: true,
         fillColor: const Color(0xFF1E1E1E),
@@ -690,17 +743,51 @@ class _OrganizerApplicationPageState extends State<OrganizerApplicationPage> {
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
         ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.5)),
+        ),
         hintText: 'Select venue',
-        hintStyle: TextStyle(color: Colors.grey.shade400),
+        hintStyle: const TextStyle(color: Colors.white70),
+        labelStyle: const TextStyle(color: Colors.white),
         prefixIcon: const Icon(Icons.location_on, color: Colors.white),
       ),
-      style: const TextStyle(color: Colors.white),
+      style: const TextStyle(color: Colors.white, fontSize: 16),
+      selectedItemBuilder: (context) {
+        return venues.map((venue) {
+          return Text(
+            '${venue['venue_name']} ${venue['city'] != null ? '(${venue['city']})' : ''}',
+            style: const TextStyle(color: Colors.white),
+            overflow: TextOverflow.ellipsis,
+          );
+        }).toList();
+      },
       items: venues.map((venue) {
+        final distance = venue['_distance'] as double?;
+        final distanceStr = (distance != null && distance != double.maxFinite)
+            ? '${distance.toStringAsFixed(1)} km away'
+            : '';
+
         return DropdownMenuItem<int>(
           value: venue['id'] as int,
-          child: Text(
-            '${venue['venue_name']} ${venue['city'] != null ? '(${venue['city']})' : ''}',
-            overflow: TextOverflow.ellipsis,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '${venue['venue_name']} ${venue['city'] != null ? '(${venue['city']})' : ''}',
+                style: const TextStyle(color: Colors.white, fontSize: 14),
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (distanceStr.isNotEmpty)
+                Text(
+                  distanceStr,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.7),
+                    fontSize: 12,
+                  ),
+                ),
+            ],
           ),
         );
       }).toList(),

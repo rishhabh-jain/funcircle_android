@@ -101,13 +101,17 @@ class _VenuesWidgetState extends State<VenuesWidget>
       child: Scaffold(
         key: scaffoldKey,
         backgroundColor: FlutterFlowTheme.of(context).secondary,
+        extendBody: true,
         body: SafeArea(
           top: true,
-          child: Column(
-            mainAxisSize: MainAxisSize.max,
+          bottom: false,
+          child: Stack(
             children: [
-              Expanded(
-                child: Column(
+              Column(
+                mainAxisSize: MainAxisSize.max,
+                children: [
+                  Expanded(
+                    child: Column(
                   children: [
                     Align(
                       alignment: Alignment(0.0, 0),
@@ -185,23 +189,23 @@ class _VenuesWidgetState extends State<VenuesWidget>
                         ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-              Align(
-                alignment: AlignmentDirectional(-1.0, -1.0),
-                child: wrapWithModel(
-                  model: _model.navbarnewModel,
-                  updateCallback: () => safeSetState(() {}),
-                  child: NavbarnewWidget(
-                    number: 1,
+                    ],
                   ),
                 ),
+              ],
+            ),
+            // Floating navigation bar
+            wrapWithModel(
+              model: _model.navbarnewModel,
+              updateCallback: () => safeSetState(() {}),
+              child: NavbarnewWidget(
+                number: 1,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
+    ),
     );
   }
 }

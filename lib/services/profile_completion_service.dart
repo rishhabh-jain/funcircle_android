@@ -55,8 +55,17 @@ class ProfileCompletionService {
     String? email,
     String? phoneNumber,
     String? profilePicture,
+    double? latitude,
+    double? longitude,
   }) async {
     try {
+      // Debug: Log what we're trying to save
+      print('DEBUG: ProfileCompletionService.createUserProfile called:');
+      print('  userId: $userId');
+      print('  firstName: $firstName');
+      print('  latitude: $latitude');
+      print('  longitude: $longitude');
+
       // Check if user already exists
       final existingUser = await _client
           .from('users')
@@ -92,13 +101,27 @@ class ProfileCompletionService {
           updateData['profile_picture'] = profilePicture;
         }
 
+        if (latitude != null) {
+          updateData['lat'] = latitude;
+          print('DEBUG: Adding latitude to update: $latitude');
+        }
+
+        if (longitude != null) {
+          updateData['lng'] = longitude;
+          print('DEBUG: Adding longitude to update: $longitude');
+        }
+
+        print('DEBUG: Update data: $updateData');
+
         await _client
             .from('users')
             .update(updateData)
             .eq('user_id', userId);
+
+        print('DEBUG: User profile updated successfully');
       } else {
         // New user, insert profile
-        await _client.from('users').insert({
+        final insertData = <String, dynamic>{
           'user_id': userId,
           'first_name': firstName,
           'gender': gender,
@@ -108,7 +131,23 @@ class ProfileCompletionService {
           'created': DateTime.now().toIso8601String(),
           'isOnline': true,
           'lastactive': DateTime.now().toIso8601String(),
-        });
+        };
+
+        if (latitude != null) {
+          insertData['lat'] = latitude;
+          print('DEBUG: Adding latitude to insert: $latitude');
+        }
+
+        if (longitude != null) {
+          insertData['lng'] = longitude;
+          print('DEBUG: Adding longitude to insert: $longitude');
+        }
+
+        print('DEBUG: Insert data: $insertData');
+
+        await _client.from('users').insert(insertData);
+
+        print('DEBUG: New user profile inserted successfully');
       }
     } catch (e) {
       print('Error creating user profile: $e');
@@ -139,9 +178,24 @@ class ProfileCompletionService {
     required int level,
   }) async {
     try {
-      final fieldName = sport == 'badminton'
-          ? 'skill_level_badminton'
-          : 'skill_level_pickleball';
+      String fieldName;
+      switch (sport) {
+        case 'badminton':
+          fieldName = 'skill_level_badminton';
+          break;
+        case 'pickleball':
+          fieldName = 'skill_level_pickleball';
+          break;
+        case 'tennis':
+          fieldName = 'skill_level_tennis';
+          break;
+        case 'padel':
+          fieldName = 'skill_level_padel';
+          break;
+        default:
+          print('Unknown sport: $sport');
+          return;
+      }
 
       await _client.from('users').update({
         fieldName: level,

@@ -2,6 +2,7 @@ import '/custom_code/actions/index.dart' as actions;
 import 'package:provider/provider.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:ui';
 
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -240,157 +241,120 @@ class NavBarPageState extends State<NavBarPage> {
 
     return Scaffold(
       resizeToAvoidBottomInset: !widget.disableResizeToAvoidBottomInset,
-      body: _currentPage ?? tabs[_currentPageName],
-      bottomNavigationBar: _buildGlassyBottomNav(context, currentIndex, tabs),
+      body: Stack(
+        children: [
+          // Main content - full screen
+          _currentPage ?? tabs[_currentPageName]!,
+          // Floating navigation bar overlay
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: _buildGlassyBottomNav(context, currentIndex, tabs),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildGlassyBottomNav(BuildContext context, int currentIndex, Map<String, Widget> tabs) {
+    // Native iOS-style navigation items with filled/outline icon variants
     final navItems = [
-      {'icon': Icons.home_rounded, 'label': 'Home'},
-      {'icon': Icons.explore_rounded, 'label': 'Find'},
-      {'icon': Icons.sports_tennis_rounded, 'label': 'Play'},
-      {'icon': Icons.stadium_rounded, 'label': 'Venues'},
-      {'icon': Icons.forum_rounded, 'label': 'Chats'},
+      {'iconOutline': Icons.home_outlined, 'iconFilled': Icons.home_rounded, 'label': 'Home'},
+      {'iconOutline': Icons.explore_outlined, 'iconFilled': Icons.explore_rounded, 'label': 'Find'},
+      {'iconOutline': Icons.sports_tennis_outlined, 'iconFilled': Icons.sports_tennis_rounded, 'label': 'Play'},
+      {'iconOutline': Icons.stadium_outlined, 'iconFilled': Icons.stadium_rounded, 'label': 'Venues'},
+      {'iconOutline': Icons.forum_outlined, 'iconFilled': Icons.forum_rounded, 'label': 'Chats'},
     ];
 
-    // Get bottom safe area padding
     final bottomPadding = MediaQuery.of(context).padding.bottom;
 
     return Container(
-      decoration: BoxDecoration(
-        boxShadow: [
-          // Main shadow
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.6),
-            blurRadius: 15,
-            spreadRadius: 0,
-            offset: const Offset(0, -4),
-          ),
-        ],
-      ),
+      margin: EdgeInsets.fromLTRB(8, 0, 8, bottomPadding > 0 ? 10 : 8), // Native iOS margins with safe area
       child: ClipRRect(
-        borderRadius: BorderRadius.zero,
+        borderRadius: BorderRadius.circular(38), // iOS native radius (larger)
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
+          filter: ImageFilter.blur(sigmaX: 30, sigmaY: 30), // iOS native blur strength
           child: Container(
-            // Add bottom padding for safe area
-            padding: EdgeInsets.only(bottom: bottomPadding),
+            height: 68, // iOS native tab bar height
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  const Color(0xFF1C1C1E).withValues(alpha: 0.97),
-                  const Color(0xFF141414).withValues(alpha: 0.98),
-                  Colors.black.withValues(alpha: 0.99),
-                ],
-                stops: const [0.0, 0.5, 1.0],
+              // iOS native material background - dark mode
+              color: Colors.black.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(38),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.15),
+                width: 0.33, // Hairline border like iOS
               ),
-              border: Border(
-                top: BorderSide(
-                  width: 1,
-                  color: Colors.white.withValues(alpha: 0.1),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  blurRadius: 30,
+                  offset: const Offset(0, 8),
+                  spreadRadius: -5,
                 ),
-              ),
+              ],
             ),
-            child: SizedBox(
-              height: 65,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: List.generate(navItems.length, (index) {
-                      final item = navItems[index];
-                      final isSelected = currentIndex == index;
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: List.generate(navItems.length, (index) {
+                  final item = navItems[index];
+                  final isSelected = currentIndex == index;
 
-                      return Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            safeSetState(() {
-                              _currentPage = null;
-                              _currentPageName = tabs.keys.toList()[index];
-                            });
-                          },
-                          behavior: HitTestBehavior.opaque,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 2),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                // Icon with gradient background when selected
-                                AnimatedContainer(
-                                  duration: const Duration(milliseconds: 250),
-                                  curve: Curves.easeOutCubic,
-                                  width: isSelected ? 42 : 34,
-                                  height: isSelected ? 42 : 34,
-                                  decoration: BoxDecoration(
-                                    gradient: isSelected
-                                        ? const LinearGradient(
-                                            begin: Alignment.topLeft,
-                                            end: Alignment.bottomRight,
-                                            colors: [
-                                              Color(0xFFFF6B35),
-                                              Color(0xFFF7931E),
-                                            ],
-                                          )
-                                        : null,
-                                    borderRadius: BorderRadius.circular(13),
-                                    border: isSelected
-                                        ? Border.all(
-                                            color: Colors.white.withValues(alpha: 0.35),
-                                            width: 1.5,
-                                          )
-                                        : null,
-                                    boxShadow: isSelected
-                                        ? [
-                                            BoxShadow(
-                                              color: const Color(0xFFFF6B35)
-                                                  .withValues(alpha: 0.4),
-                                              blurRadius: 16,
-                                              spreadRadius: 0,
-                                              offset: const Offset(0, 3),
-                                            ),
-                                          ]
-                                        : null,
-                                  ),
-                                  child: Icon(
-                                    item['icon'] as IconData,
-                                    color: isSelected
-                                        ? Colors.white
-                                        : Colors.white.withValues(alpha: 0.45),
-                                    size: isSelected ? 24 : 22,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                // Label
-                                Text(
-                                  item['label'] as String,
-                                  style: TextStyle(
-                                    color: isSelected
-                                        ? Colors.white
-                                        : Colors.white.withValues(alpha: 0.55),
-                                    fontSize: isSelected ? 9.5 : 8.5,
-                                    fontWeight: isSelected
-                                        ? FontWeight.w700
-                                        : FontWeight.w600,
-                                    letterSpacing: 0.1,
-                                    shadows: isSelected
-                                        ? [
-                                            Shadow(
-                                              color: Colors.black
-                                                  .withValues(alpha: 0.3),
-                                              blurRadius: 4,
-                                            ),
-                                          ]
-                                        : null,
-                                  ),
-                                ),
-                              ],
+                  return Expanded(
+                    child: GestureDetector(
+                      onTap: () {
+                        // Haptic feedback - iOS style
+                        HapticFeedback.selectionClick();
+                        safeSetState(() {
+                          _currentPage = null;
+                          _currentPageName = tabs.keys.toList()[index];
+                        });
+                      },
+                      behavior: HitTestBehavior.opaque,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 250),
+                        curve: Curves.easeInOut,
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            // Icon with native iOS spring animation
+                            AnimatedScale(
+                              scale: isSelected ? 1.0 : 0.95,
+                              duration: const Duration(milliseconds: 200),
+                              curve: Curves.easeOut,
+                              child: Icon(
+                                // Filled when selected, outline when not (native iOS style)
+                                isSelected
+                                    ? item['iconFilled'] as IconData
+                                    : item['iconOutline'] as IconData,
+                                color: isSelected
+                                    ? Colors.white // Dark mode - white when selected
+                                    : Colors.white.withValues(alpha: 0.55), // Gray when not selected
+                                size: 28, // iOS native icon size
+                              ),
                             ),
-                          ),
+                            const SizedBox(height: 2),
+                            // Label - iOS native style
+                            Text(
+                              item['label'] as String,
+                              style: TextStyle(
+                                color: isSelected
+                                    ? Colors.white
+                                    : Colors.white.withValues(alpha: 0.55),
+                                fontSize: 10,
+                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                                letterSpacing: -0.08, // iOS native tight kerning
+                              ),
+                            ),
+                          ],
                         ),
-                      );
-                    }),
+                      ),
+                    ),
+                  );
+                }),
               ),
             ),
           ),

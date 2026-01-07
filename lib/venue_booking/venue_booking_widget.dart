@@ -690,7 +690,15 @@ class _VenueBookingWidgetState extends State<VenueBookingWidget> {
 
   Widget _buildVenueCard(VenuesRow venue) {
     final hasImages = venue.images.isNotEmpty;
-    final imageUrl = hasImages ? venue.images.first : null;
+    // Validate image URL - must be a complete URL or null
+    String? imageUrl;
+    if (hasImages) {
+      final rawUrl = venue.images.first;
+      // Only use URL if it's valid (starts with http or has proper extension)
+      if (rawUrl.startsWith('http') || rawUrl.contains('.jpg') || rawUrl.contains('.png') || rawUrl.contains('.jpeg')) {
+        imageUrl = rawUrl;
+      }
+    }
     final distance = _model.venueDistances[venue.id];
     final duration = _model.venueDurations[venue.id];
 
